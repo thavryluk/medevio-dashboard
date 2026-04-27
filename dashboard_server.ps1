@@ -2,15 +2,23 @@ $ErrorActionPreference = 'Stop'
 
 $ApiBaseDev  = 'https://api.medevio.dev/external/v1'
 $ApiBaseProd = 'https://api.medevio.cz/external/v1'
-$Port        = 8766
 function Resolve-ApiBase([string]$Env) { if ($Env -eq 'prod') { $ApiBaseProd } else { $ApiBaseDev } }
-$ConfigFile        = Join-Path $PSScriptRoot 'clinics.json'
-$PlansFile         = Join-Path $PSScriptRoot 'plans.json'
-$PlanTemplatesFile = Join-Path $PSScriptRoot 'plan-templates.json'
-$HtmlFile          = Join-Path $PSScriptRoot 'medevio-dashboard-live.html'
 
-if (-not (Test-Path $ConfigFile)) { Write-Host "ERR: chybi config $ConfigFile"; exit 1 }
-if (-not (Test-Path $PlansFile)) { '[]' | Out-File -FilePath $PlansFile -Encoding utf8 -NoNewline }
+# Konfigurace pres env var (pro Docker / Fly.io); fallback na lokalni cesty
+$Port    = if ($env:PORT)     { [int]$env:PORT }     else { 8766 }
+$Host    = if ($env:HOST)     { $env:HOST }          else { 'localhost' }
+$DataDir = if ($env:DATA_DIR) { $env:DATA_DIR }      else { $PSScriptRoot }
+
+if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir -Force | Out-Null }
+
+$ConfigFile        = Join-Path $DataDir       'clinics.json'
+$PlansFile         = Join-Path $DataDir       'plans.json'
+$PlanTemplatesFile = Join-Path $PSScriptRoot  'plan-templates.json'
+$HtmlFile          = Join-Path $PSScriptRoot  'medevio-dashboard-live.html'
+
+# V Dockeru zaciname s prazdnym configem - kliniky se pridaji pres UI
+if (-not (Test-Path $ConfigFile))        { '[]' | Out-File -FilePath $ConfigFile -Encoding utf8 -NoNewline; Write-Host "Vytvoren prazdny $ConfigFile" }
+if (-not (Test-Path $PlansFile))         { '[]' | Out-File -FilePath $PlansFile  -Encoding utf8 -NoNewline }
 if (-not (Test-Path $PlanTemplatesFile)) { Write-Host "ERR: chybi $PlanTemplatesFile"; exit 1 }
 
 function Get-Clinics {
@@ -608,7 +616,7 @@ function Plan-WithLiveData([object]$Plan, [object]$Template) {
 
 # ===== KONEC PLANY =====
 
-$prefix = "http://localhost:$Port/"
+$prefix = "http://${Host}:$Port/"
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($prefix)
 try { $listener.Start() } catch { Write-Host "ERR: $($_.Exception.Message)"; exit 1 }

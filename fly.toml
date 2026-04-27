@@ -1,0 +1,36 @@
+# Fly.io konfigurace pro Medevio dashboard
+# Generovano rucne (alternativa: 'fly launch' inicializuje prvotni soubor)
+
+app = "medevio-dashboard"
+primary_region = "fra"  # Frankfurt - nejblize CR
+
+[build]
+  # Pouziva Dockerfile v rootu repa
+
+[env]
+  DATA_DIR = "/data"
+  HOST     = "+"
+  PORT     = "8766"
+  TZ       = "Europe/Prague"
+
+[http_service]
+  internal_port      = 8766
+  force_https        = true
+  auto_stop_machines = "suspend"   # po 30s necinnosti uspi (uspora kreditu)
+  auto_start_machines = true        # probudi pri prvnim requestu (~1 s)
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 25
+    hard_limit = 50
+
+# Persistentni disk pro stateful soubory (clinics.json, plans.json)
+# Vytvori se pri prvnim deploy: 'fly volumes create medevio_data --size 1 --region fra'
+[mounts]
+  source      = "medevio_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

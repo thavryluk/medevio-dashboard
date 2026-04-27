@@ -1,0 +1,24 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dokumentace - neni potreba v image
+*.md
+
+# Sensitivni soubory - nikdy do image
+clinics.json
+plans.json
+
+# Lokalni / debug artefakty
+test-step.pdf
+_funcs.ps1
+medevio-spec.js
+
+# Docker / Fly soubory - prilis meta
+Dockerfile
+.dockerignore
+fly.toml
+
+# Kubita JSON dumpy z C:\Users\thavr (nemely by tu byt, ale jistota)
+kubita-*.json
