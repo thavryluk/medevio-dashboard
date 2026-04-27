@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — MUDr. Šimon Kubita (live)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f3f5f9; --card: #ffffff; --ink-1: #0f172a; --ink-2: #475569; --ink-3: #94a3b8;
+    --border: #e5e9f0; --primary: #2563eb; --primary-soft: #dbeafe;
+    --success: #16a34a; --success-soft: #dcfce7;
+    --warning: #ea580c; --warning-soft: #ffedd5;
+    --danger: #dc2626; --danger-soft: #fee2e2;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.05);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background: var(--bg); color: var(--ink-1); -webkit-font-smoothing: antialiased; }
+  .app { max-width: 1400px; margin: 0 auto; padding: 28px 32px 48px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+  header h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+  header .sub { color: var(--ink-2); font-size: 14px; margin-top: 4px; }
+  header .right { display: flex; align-items: center; gap: 14px; }
+  header .meta { text-align: right; color: var(--ink-3); font-size: 13px; }
+  header .meta strong { color: var(--ink-2); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--primary); color: #fff; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: var(--shadow); transition: background .1s; }
+  .btn:hover { background: #1d4ed8; }
+  .btn:disabled { background: var(--ink-3); cursor: wait; }
+  .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .banner { padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; display: none; }
+  .banner.error { background: var(--danger-soft); color: var(--danger); display: block; }
+  .banner.loading { background: var(--primary-soft); color: var(--primary); display: block; }
+
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 20px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .kpi .label { color: var(--ink-2); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 32px; font-weight: 700; margin-top: 6px; letter-spacing: -.02em; }
+  .kpi .hint { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+  .kpi .accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--primary); }
+  .kpi.success .accent { background: var(--success); }
+  .kpi.warning .accent { background: var(--warning); }
+  .kpi.danger .accent { background: var(--danger); }
+  .kpi.info .accent { background: #0ea5e9; }
+  .kpi.purple .accent { background: #7c3aed; }
+
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 2px; font-size: 15px; font-weight: 650; }
+  .card .cap { color: var(--ink-3); font-size: 12px; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  .col-4 { grid-column: span 4; } .col-6 { grid-column: span 6; } .col-8 { grid-column: span 8; } .col-12 { grid-column: span 12; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--ink-1); }
+  table tr:last-child td { border-bottom: 0; }
+  table tr:hover td { background: #fafbfe; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge.open { background: var(--warning-soft); color: var(--warning); }
+  .badge.done { background: var(--success-soft); color: var(--success); }
+  .badge.overdue { background: var(--danger-soft); color: var(--danger); }
+  .badge.doctor { background: var(--primary-soft); color: var(--primary); }
+  .badge.patient { background: #f1f5f9; color: var(--ink-2); }
+  .reso-stats { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .reso-stats .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .reso-stats .lbl { font-size: 11px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .reso-stats .val { font-size: 16px; font-weight: 700; color: var(--ink-1); letter-spacing: -.01em; }
+  .reso-stats .row.median .val { color: #7c3aed; font-size: 19px; }
+  .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; background: var(--primary-soft); color: var(--primary); border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; transition: background .1s; }
+  .link-btn:hover { background: var(--primary); color: #fff; }
+  .clinic-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #eef2ff; color: #4338ca; }
+
+  .ms { position: relative; display: inline-block; }
+  .ms-btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; background: #fff; color: var(--ink-1); border: 1px solid var(--border); border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: var(--shadow); min-width: 240px; justify-content: space-between; }
+  .ms-btn:hover { border-color: var(--primary); }
+  .ms-btn .caret { color: var(--ink-3); }
+  .ms-panel { display: none; position: absolute; top: calc(100% + 6px); right: 0; min-width: 280px; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 28px rgba(15,23,42,.12); z-index: 100; }
+  .ms-panel.open { display: block; }
+  .ms-panel .ms-actions { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .ms-panel .ms-actions button { flex: 1; padding: 6px 10px; background: #f1f5f9; color: var(--ink-2); border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .ms-panel .ms-actions button:hover { background: #e2e8f0; color: var(--ink-1); }
+  .ms-panel .ms-list { max-height: 320px; overflow: auto; padding: 6px; }
+  .ms-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; user-select: none; font-size: 14px; }
+  .ms-item:hover { background: var(--bg); }
+  .ms-item input { margin: 0; width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+  .ms-item .lbl { color: var(--ink-1); font-weight: 500; }
+  .ms-item .slug { color: var(--ink-3); font-size: 11px; margin-left: auto; }
+  .ms-item .env-pill { font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 700; margin-left: 6px; }
+  .env-pill.dev { background: #fef3c7; color: #92400e; }
+  .env-pill.prod { background: #dcfce7; color: #166534; }
+  .ms-panel .ms-footer { display: flex; padding: 8px 12px; border-top: 1px solid var(--border); }
+  .ms-panel .ms-footer button { flex: 1; padding: 7px 10px; background: var(--ink-1); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .ms-panel .ms-footer button:hover { background: #1e293b; }
+
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(15,23,42,.3); width: 100%; max-width: 900px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .modal-close { background: none; border: none; font-size: 22px; color: var(--ink-3); cursor: pointer; padding: 4px 10px; border-radius: 6px; }
+  .modal-close:hover { background: var(--bg); color: var(--ink-1); }
+  .modal-body { padding: 18px 24px 24px; overflow: auto; }
+
+  .clin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .clin-table th { text-align: left; font-weight: 600; color: var(--ink-2); padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+  .clin-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .clin-table tr.disabled td { opacity: 0.45; }
+  .clin-table input[type=text], .clin-table input[type=password] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; width: 100%; }
+  .clin-table input[type=password] { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  .clin-table .actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+  .clin-table .icon-btn { background: var(--bg); border: none; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .clin-table .icon-btn:hover { background: var(--border); color: var(--ink-1); }
+  .clin-table .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .clin-table .icon-btn.primary { background: var(--primary); color: #fff; }
+  .clin-table .icon-btn.primary:hover { background: #1d4ed8; }
+
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--ink-3); border-radius: 999px; transition: .15s; }
+  .switch .slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + .slider { background: var(--success); }
+  .switch input:checked + .slider::before { transform: translateX(16px); }
+
+  .env-toggle { display: inline-flex; background: var(--bg); border-radius: 6px; padding: 2px; }
+  .env-toggle label { padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-2); border-radius: 4px; }
+  .env-toggle input { display: none; }
+  .env-toggle input:checked + span { background: #fff; color: var(--ink-1); box-shadow: var(--shadow); display: inline-block; padding: 4px 10px; border-radius: 4px; }
+  .env-toggle label span { display: inline-block; padding: 4px 10px; border-radius: 4px; }
+
+  .add-form { display: grid; grid-template-columns: 1fr 1fr 140px 100px; gap: 8px; align-items: end; padding: 14px; background: var(--bg); border-radius: 10px; margin-top: 16px; }
+  .add-form .field label { display: block; font-size: 11px; color: var(--ink-2); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; letter-spacing: .03em; }
+  .add-form input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%; font-family: inherit; }
+  .add-form .add-btn { padding: 9px 16px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .add-form .add-btn:hover { background: #1d4ed8; }
+  .add-form .add-btn:disabled { background: var(--ink-3); cursor: wait; }
+  .add-form .env-radio { display: flex; gap: 6px; }
+  .add-form .env-radio label { flex: 1; text-align: center; padding: 8px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .add-form .env-radio input { display: none; }
+  .add-form .env-radio input:checked + span { color: var(--primary); }
+  .add-form .env-radio label:has(input:checked) { background: var(--primary-soft); border-color: var(--primary); }
+  .form-msg { grid-column: 1 / -1; font-size: 12px; margin-top: 4px; }
+  .form-msg.error { color: var(--danger); }
+  .form-msg.success { color: var(--success); }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .tabs button { background: none; border: none; padding: 12px 18px; font-size: 14px; font-weight: 600; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .1s; }
+  .tabs button:hover { color: var(--ink-2); }
+  .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .plans-layout { display: grid; grid-template-columns: 360px 1fr; gap: 16px; }
+  @media (max-width: 1100px) { .plans-layout { grid-template-columns: 1fr; } }
+  .plans-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .plan-card { padding: 14px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; margin-bottom: 8px; background: #fff; transition: border-color .1s; }
+  .plan-card:hover { border-color: var(--primary); }
+  .plan-card.selected { border-color: var(--primary); background: var(--primary-soft); }
+  .plan-card .pc-title { font-weight: 650; font-size: 14px; color: var(--ink-1); }
+  .plan-card .pc-meta { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+  .plan-card .pc-progress { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--ink-2); }
+  .pc-bar { flex: 1; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .pc-bar-fill { height: 100%; background: var(--success); border-radius: 999px; transition: width .3s; }
+
+  .plan-detail-empty { text-align: center; padding: 80px 20px; color: var(--ink-3); border: 2px dashed var(--border); border-radius: 12px; }
+  .phase-block { background: var(--bg); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .phase-block .phase-head { font-weight: 650; font-size: 13px; color: var(--ink-2); margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .step-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; display: grid; grid-template-columns: 80px 1fr 100px 110px 110px 90px; gap: 10px; align-items: center; font-size: 13px; }
+  .step-card.completed { opacity: 0.65; background: #f8faf8; }
+  .step-card.overdue { border-color: var(--danger); background: #fef9f9; }
+  .step-card .sc-code { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11px; color: var(--ink-3); font-weight: 600; }
+  .step-card .sc-title { font-weight: 600; color: var(--ink-1); }
+  .step-card .sc-conditional { font-size: 11px; color: var(--warning); margin-top: 2px; }
+  .role-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .role-pill.PATIENT { background: #fef3c7; color: #92400e; }
+  .role-pill.GP { background: #dbeafe; color: #1e40af; }
+  .role-pill.SURGEON { background: #fce7f3; color: #9d174d; }
+  .role-pill.ANEST { background: #ede9fe; color: #5b21b6; }
+  .role-pill.NUTRI { background: #d1fae5; color: #065f46; }
+  .role-pill.COORD { background: #e0e7ff; color: #3730a3; }
+  .cat-pill { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #f1f5f9; color: var(--ink-2); margin-left: 4px; }
+  .state-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .state-pill.NOT_STARTED { background: #f1f5f9; color: var(--ink-2); }
+  .state-pill.PENDING_PATIENT { background: #fef3c7; color: #92400e; }
+  .state-pill.PENDING_CLINICIAN { background: #dbeafe; color: #1e40af; }
+  .state-pill.IN_PROGRESS { background: #cffafe; color: #155e75; }
+  .state-pill.SUBMITTED { background: #fae8ff; color: #86198f; }
+  .state-pill.NEEDS_REVIEW { background: #fed7aa; color: #9a3412; }
+  .state-pill.BLOCKED { background: #fecaca; color: #991b1b; }
+  .state-pill.COMPLETED { background: var(--success-soft); color: var(--success); }
+  .state-pill.SKIPPED { background: #f1f5f9; color: var(--ink-3); }
+  .state-pill.FAILED { background: var(--danger-soft); color: var(--danger); }
+  .state-pill.OVERDUE { background: var(--danger-soft); color: var(--danger); }
+
+  .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px; background: #fff; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; align-items: end; }
+  .filter-bar .f-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-bar label { font-size: 11px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .03em; }
+  .filter-bar select, .filter-bar input { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 140px; font-family: inherit; }
+  .filter-bar .f-checkbox { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: pointer; user-select: none; }
+  .filter-bar .clear-btn { background: var(--bg); color: var(--ink-2); border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; }
+  .filter-bar .clear-btn:hover { background: var(--border); color: var(--ink-1); }
+  .items-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .items-table th { text-align: left; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-2); font-weight: 600; cursor: pointer; user-select: none; }
+  .items-table th:hover { background: var(--border); }
+  .items-table th.sorted { color: var(--primary); }
+  .items-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .items-table tr:last-child td { border-bottom: 0; }
+  .items-table tr.overdue td { background: #fef9f9; }
+  .items-table tr.completed td { opacity: 0.6; }
+
+  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .col-4, .col-6, .col-8 { grid-column: span 12; } }
+  @media (max-width: 640px) { .app { padding: 16px; } .kpis { grid-template-columns: repeat(2, 1fr); } header .meta { text-align: left; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div>
+    <h1 id="clinicName">Medevio Dashboard</h1>
+    <div class="sub" id="clinicSub">Požadavky pacientů — vyberte jednu nebo více klinik</div>
+  </div>
+  <div class="right">
+    <div class="meta">
+      <div>Zdroj: <strong>Medevio External API</strong> (dev)</div>
+      <div>Poslední aktualizace: <strong id="dataDate">—</strong></div>
+    </div>
+    <div class="ms" id="msContainer">
+      <button type="button" class="ms-btn" id="msBtn" onclick="toggleMs(event)">
+        <span id="msLabel">Načítám…</span>
+        <span class="caret">▾</span>
+      </button>
+      <div class="ms-panel" id="msPanel">
+        <div class="ms-actions">
+          <button type="button" onclick="msSelectAll()">Vybrat vše</button>
+          <button type="button" onclick="msSelectNone()">Zrušit vše</button>
+        </div>
+        <div class="ms-list" id="msList"></div>
+        <div class="ms-footer">
+          <button type="button" onclick="openManageModal()">⚙ Spravovat API klíče</button>
+        </div>
+      </div>
+    </div>
+    <button class="btn" id="btnRefresh" onclick="loadData()">
+      <span id="btnIcon">↻</span>
+      <span id="btnText">Obnovit</span>
+    </button>
+  </div>
+</header>
+
+<div id="banner" class="banner"></div>
+
+<div class="modal-bg" id="manageModal" onclick="if(event.target===this)closeManageModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Správa API klíčů</h2>
+      <button class="modal-close" onclick="closeManageModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <table class="clin-table" id="manageTable">
+        <thead><tr><th style="width:40px;">Akt.</th><th>Název</th><th style="width:140px;">Slug</th><th style="width:80px;">Prostředí</th><th>Token</th><th style="width:160px;">Akce</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3 style="font-size:14px;font-weight:650;margin:24px 0 8px;">Přidat nový API klíč</h3>
+      <form class="add-form" id="addForm" onsubmit="addClinic(event)">
+        <div class="field" style="grid-column: 1 / 3;"><label>Token</label><input type="text" name="token" placeholder="Vložte Personal Access Token" required></div>
+        <div class="field"><label>Prostředí</label>
+          <div class="env-radio">
+            <label><input type="radio" name="env" value="dev" checked><span>dev</span></label>
+            <label><input type="radio" name="env" value="prod"><span>prod</span></label>
+          </div>
+        </div>
+        <button type="submit" class="add-btn" id="addBtn">Ověřit a přidat</button>
+        <div class="field" style="grid-column: 1 / 3;"><label>Vlastní název (nepovinné)</label><input type="text" name="label" placeholder="Pokud prázdné, použije se název z API"></div>
+        <div class="form-msg" id="addMsg"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button data-tab="dashboard" class="active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+  <button data-tab="plans" onclick="switchTab('plans')">🗂️ Léčebné plány</button>
+  <button data-tab="items" onclick="switchTab('items')">📋 Položky plánů</button>
+</nav>
+
+<div id="tab-dashboard" class="tab-content active">
+
+<div class="card" style="margin-bottom: 20px;">
+  <h2>Nejstarší otevřené požadavky</h2>
+  <div class="cap">Top 5 · klikem otevřete v Medevio aplikaci</div>
+  <table id="tableOldest">
+    <thead><tr><th>Vytvořeno</th><th>Stáří</th><th>Klinika</th><th>Pacient</th><th>Typ</th><th>Autor</th><th style="width:110px;text-align:right;">Akce</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span class="accent"></span><div class="label">Celkem požadavků</div><div class="value" id="kpi-total">—</div><div class="hint" id="kpi-total-hint"></div></div>
+  <div class="kpi success"><span class="accent"></span><div class="label">Vyřešeno</div><div class="value" id="kpi-resolved">—</div><div class="hint" id="kpi-resolved-hint"></div></div>
+  <div class="kpi warning"><span class="accent"></span><div class="label">Otevřeno</div><div class="value" id="kpi-open">—</div><div class="hint" id="kpi-open-hint"></div></div>
+  <div class="kpi info"><span class="accent"></span><div class="label">Unikátní pacienti</div><div class="value" id="kpi-patients">—</div><div class="hint" id="kpi-patients-hint"></div></div>
+  <div class="kpi purple"><span class="accent"></span><div class="label">Doba vyřízení</div>
+    <div class="reso-stats">
+      <div class="row"><span class="lbl">Průměr</span><span class="val" id="kpi-avg">—</span></div>
+      <div class="row median"><span class="lbl">Medián</span><span class="val" id="kpi-median">—</span></div>
+      <div class="row"><span class="lbl">P90</span><span class="val" id="kpi-p90">—</span></div>
+    </div>
+  </div>
+  <div class="kpi danger"><span class="accent"></span><div class="label">Po termínu</div><div class="value" id="kpi-overdue">—</div><div class="hint">z otevřených</div></div>
+</div>
+
+<div class="grid">
+  <div class="card col-6"><h2>Typy požadavků</h2><div class="cap">Rozdělení podle šablony</div><div class="chart-wrap"><canvas id="chartTypes"></canvas></div></div>
+  <div class="card col-6"><h2>Požadavky v čase</h2><div class="cap">Počet vytvořených po měsících</div><div class="chart-wrap"><canvas id="chartTime"></canvas></div></div>
+  <div class="card col-4"><h2>Autor požadavku</h2><div class="cap">Lékař vs pacient</div><div class="chart-wrap"><canvas id="chartAuthor"></canvas></div></div>
+  <div class="card col-8"><h2>Stav podle typu</h2><div class="cap">Vyřešeno × otevřeno</div><div class="chart-wrap"><canvas id="chartStatusByType"></canvas></div></div>
+  <div class="card col-6"><h2>Top pacienti</h2><div class="cap">Podle počtu požadavků</div><div class="chart-wrap"><canvas id="chartPatients"></canvas></div></div>
+  <div class="card col-6"><h2>Doba vyřízení podle typu</h2><div class="cap">Průměr · medián · P90 (horní decil) — jen vyřešené, v hodinách</div><div class="chart-wrap"><canvas id="chartResolution"></canvas></div></div>
+
+  <div class="card col-6">
+    <h2>Otevřené požadavky</h2>
+    <div class="cap"><span id="openCount">0</span> aktivních · seřazeno podle vzniku</div>
+    <div style="max-height: 360px; overflow: auto;">
+      <table id="tableOpen"><thead><tr><th>Vytvořeno</th><th>Klinika</th><th>Pacient</th><th>Typ</th><th>Autor</th><th>Stav</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <div class="card col-6">
+    <h2>Nejnovější aktivita</h2>
+    <div class="cap">10 posledních</div>
+    <div style="max-height: 360px; overflow: auto;">
+      <table id="tableRecent"><thead><tr><th>Datum</th><th>Klinika</th><th>Pacient</th><th>Typ</th><th>Doba vyřízení</th><th>Stav</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /tab-dashboard -->
+
+<div id="tab-plans" class="tab-content">
+  <div class="plans-toolbar">
+    <div>
+      <h2 style="margin:0;font-size:18px;">Léčebné plány</h2>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:2px;"><span id="plansSummary">—</span></div>
+    </div>
+    <button class="btn" onclick="openNewPlanModal()">＋ Nový plán</button>
+  </div>
+  <div class="plans-layout">
+    <div id="plansList"><div style="text-align:center;color:var(--ink-3);padding:40px;">Načítám…</div></div>
+    <div id="planDetail"><div class="plan-detail-empty">Vyberte plán vlevo, nebo klikněte „Nový plán" nahoře.</div></div>
+  </div>
+</div><!-- /tab-plans -->
+
+<div id="tab-items" class="tab-content">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="margin:0;font-size:18px;">Položky léčebných plánů</h2>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:2px;"><span id="itemsSummary">—</span></div>
+    </div>
+    <button class="btn" onclick="loadItems()">↻ Obnovit</button>
+  </div>
+  <div style="font-size:11px;color:var(--ink-3);margin-bottom:14px;">⚠ Termín zde je <strong>plánovaný termín z šablony</strong> (datum operace + posun ve dnech). Termín uložený v Medevio aplikaci se může lišit (Medevio API u typů s rezervací plánovaný termín nepřebírá — je nutné jej upravit ručně v aplikaci Medevio).</div>
+  <div class="filter-bar">
+    <div class="f-group"><label>Klinika</label><select id="fltClinic" onchange="renderItems()"><option value="">Všechny</option></select></div>
+    <div class="f-group"><label>Plán</label><select id="fltPlan" onchange="renderItems()"><option value="">Všechny</option></select></div>
+    <div class="f-group"><label>Pacient</label><input type="text" id="fltPatient" placeholder="hledat…" oninput="renderItems()"></div>
+    <div class="f-group"><label>Role</label><select id="fltRole" onchange="renderItems()"><option value="">Vše</option><option value="PATIENT">Pacient</option><option value="GP">Praktický lékař</option><option value="SURGEON">Ortoped</option><option value="ANEST">Anesteziolog</option><option value="NUTRI">Nutriční terapeut</option><option value="COORD">Koordinátor</option></select></div>
+    <div class="f-group"><label>Fáze</label><select id="fltPhase" onchange="renderItems()"><option value="">Vše</option><option>0</option><option>A</option><option>B1</option><option>B2</option><option>B3</option><option>C</option></select></div>
+    <div class="f-group"><label>Kategorie</label><select id="fltCategory" onchange="renderItems()"><option value="">Vše</option><option value="EXAM">Vyšetření</option><option value="DECISION">Rozhodnutí</option><option value="LOGISTIC">Logistika</option><option value="MEDICATION">Medikace</option><option value="APPOINTMENT">Termín</option><option value="EDUCATION">Edukace</option></select></div>
+    <div class="f-group"><label>Stav</label><select id="fltState" onchange="renderItems()"><option value="">Vše</option><option value="NOT_STARTED">Nezahájeno</option><option value="PENDING_PATIENT">Čeká na pacienta</option><option value="PENDING_CLINICIAN">Čeká na lékaře</option><option value="IN_PROGRESS">Probíhá</option><option value="SUBMITTED">Odevzdáno</option><option value="NEEDS_REVIEW">K posouzení</option><option value="BLOCKED">Blokováno</option><option value="COMPLETED">Hotovo</option><option value="SKIPPED">Přeskočeno</option><option value="FAILED">Selhalo</option><option value="OVERDUE">Po termínu</option></select></div>
+    <label class="f-checkbox"><input type="checkbox" id="fltOverdue" onchange="renderItems()"> Jen po termínu</label>
+    <label class="f-checkbox"><input type="checkbox" id="fltOpen" onchange="renderItems()"> Jen otevřené</label>
+    <button class="clear-btn" onclick="clearItemFilters()">Vyčistit</button>
+  </div>
+  <div id="itemsTableWrap"><div style="text-align:center;color:var(--ink-3);padding:40px;">Načítám…</div></div>
+</div><!-- /tab-items -->
+
+<div class="modal-bg" id="newPlanModal" onclick="if(event.target===this)closeNewPlanModal()">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head">
+      <h2>Nový léčebný plán</h2>
+      <button class="modal-close" onclick="closeNewPlanModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="newPlanForm" onsubmit="createPlan(event)" style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field">
+          <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:4px;">Šablona</label>
+          <select name="templateId" id="npTemplate" required style="padding:9px;border:1px solid var(--border);border-radius:6px;font-size:14px;width:100%;font-family:inherit;"></select>
+        </div>
+        <div class="field">
+          <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:4px;">Klinika</label>
+          <select name="clinicSlug" id="npClinic" required onchange="loadPatientsForNewPlan()" style="padding:9px;border:1px solid var(--border);border-radius:6px;font-size:14px;width:100%;font-family:inherit;"></select>
+        </div>
+        <div class="field">
+          <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:4px;">Pacient</label>
+          <select name="patientId" id="npPatient" required style="padding:9px;border:1px solid var(--border);border-radius:6px;font-size:14px;width:100%;font-family:inherit;"><option value="">— Nejdřív vyberte kliniku —</option></select>
+        </div>
+        <div class="field">
+          <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:4px;">Datum operace</label>
+          <input type="date" name="surgeryDate" id="npSurgery" required style="padding:9px;border:1px solid var(--border);border-radius:6px;font-size:14px;width:100%;font-family:inherit;">
+          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Všechny termíny se vypočítají relativně k tomuto datu.</div>
+        </div>
+        <div class="form-msg" id="npMsg"></div>
+        <button type="submit" class="add-btn" id="npBtn" style="padding:11px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">Vytvořit plán a založit požadavky</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="stepDetailModal" onclick="if(event.target===this)closeStepDetail()">
+  <div class="modal" style="max-width:780px;">
+    <div class="modal-head">
+      <h2 id="sdHeader">Detail kroku</h2>
+      <button class="modal-close" onclick="closeStepDetail()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="sdContent"><div style="color:var(--ink-3);text-align:center;padding:40px;">Načítám…</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<script>
+const palette = ['#2563eb','#16a34a','#ea580c','#7c3aed','#0ea5e9','#dc2626','#65a30d','#d97706','#0891b2','#db2777','#4f46e5','#059669'];
+Chart.defaults.font.family = '-apple-system, "Segoe UI", Inter, sans-serif';
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#475569';
+
+const charts = {};
+function hoursBetween(a,b){ return (new Date(b)-new Date(a))/36e5; }
+function fmtHours(h){ if (h<1) return Math.round(h*60)+' min'; if (h<48) return Math.round(h*10)/10+' h'; return Math.round(h/24)+' dní'; }
+function fmtDateShort(iso){ if (!iso) return '—'; return new Date(iso).toLocaleDateString('cs-CZ'); }
+function median(arr){ if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
+function mean(arr){ if (!arr.length) return 0; return arr.reduce((a,b)=>a+b,0) / arr.length; }
+function percentile(arr, p){ if (!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const idx=(s.length-1)*p/100; const lo=Math.floor(idx), hi=Math.ceil(idx); if (lo===hi) return s[lo]; return s[lo]+(s[hi]-s[lo])*(idx-lo); }
+
+function setBanner(kind, msg) {
+  const el = document.getElementById('banner');
+  el.className = 'banner ' + (kind || '');
+  el.textContent = msg || '';
+}
+
+function setLoading(on) {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = on;
+  document.getElementById('btnIcon').textContent = on ? '' : '↻';
+  document.getElementById('btnIcon').className = on ? 'spin' : '';
+  document.getElementById('btnText').textContent = on ? 'Načítám…' : 'Obnovit';
+}
+
+let availableClinics = [];
+let selectedSlugs = new Set();
+
+async function initClinics() {
+  try {
+    const res = await fetch('/api/clinics', { cache: 'no-store' });
+    availableClinics = await res.json();
+    selectedSlugs = new Set(availableClinics.map(c => c.slug));
+    renderMs();
+    await loadData();
+  } catch (e) {
+    setBanner('error', 'Nepodařilo se načíst seznam klinik: ' + e.message);
+  }
+}
+
+function renderMs() {
+  const list = document.getElementById('msList');
+  list.innerHTML = '';
+  availableClinics.forEach(c => {
+    const item = document.createElement('label');
+    item.className = 'ms-item';
+    const envCls = c.env === 'prod' ? 'prod' : 'dev';
+    item.innerHTML = `<input type="checkbox" ${selectedSlugs.has(c.slug)?'checked':''} data-slug="${c.slug}"><span class="lbl">${c.label}</span><span class="env-pill ${envCls}">${envCls}</span><span class="slug">${c.slug}</span>`;
+    item.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) selectedSlugs.add(c.slug); else selectedSlugs.delete(c.slug);
+      updateMsLabel();
+    });
+    list.appendChild(item);
+  });
+  updateMsLabel();
+}
+
+function maskToken(t) {
+  if (!t) return '';
+  if (t.length < 16) return '•'.repeat(t.length);
+  return t.slice(0, 6) + '•'.repeat(8) + t.slice(-4);
+}
+
+async function openManageModal() {
+  document.getElementById('manageModal').classList.add('open');
+  document.getElementById('msPanel').classList.remove('open');
+  await renderManageTable();
+}
+function closeManageModal() { document.getElementById('manageModal').classList.remove('open'); }
+
+async function renderManageTable() {
+  const tbody = document.querySelector('#manageTable tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--ink-3);padding:20px;">Načítám…</td></tr>';
+  let full;
+  try {
+    full = await (await fetch('/api/clinics/full', { cache: 'no-store' })).json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger);">Chyba: ${e.message}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = '';
+  if (!full.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--ink-3);padding:20px;">Žádné API klíče</td></tr>'; return; }
+  full.forEach(c => {
+    const tr = document.createElement('tr');
+    if (!c.enabled) tr.classList.add('disabled');
+    const envCls = c.env === 'prod' ? 'prod' : 'dev';
+    tr.innerHTML = `
+      <td><label class="switch"><input type="checkbox" ${c.enabled?'checked':''} onchange="toggleEnabled('${c.slug}', this.checked, this)"><span class="slider"></span></label></td>
+      <td><input type="text" value="${(c.label||'').replace(/"/g,'&quot;')}" onchange="updateLabel('${c.slug}', this.value, this)"></td>
+      <td><code style="font-size:12px;color:var(--ink-2);">${c.slug}</code></td>
+      <td><span class="env-pill ${envCls}">${envCls}</span></td>
+      <td><input type="password" value="${(c.token||'').replace(/"/g,'&quot;')}" data-slug="${c.slug}" data-real="${(c.token||'').replace(/"/g,'&quot;')}"></td>
+      <td>
+        <div class="actions">
+          <button class="icon-btn" type="button" onclick="toggleTokenVis('${c.slug}', this)">👁</button>
+          <button class="icon-btn primary" type="button" onclick="copyTokenBySlug('${c.slug}', this)">Kopírovat</button>
+          <button class="icon-btn danger" type="button" onclick="deleteClinic('${c.slug}', '${(c.label||'').replace(/'/g,'&#39;')}')">Smazat</button>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function toggleEnabled(slug, enabled, el) {
+  el.disabled = true;
+  try {
+    const res = await fetch('/api/clinics?slug=' + encodeURIComponent(slug), {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ enabled })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP ' + res.status);
+    el.closest('tr').classList.toggle('disabled', !enabled);
+    await refreshAfterChange();
+  } catch (e) {
+    alert('Chyba: ' + e.message); el.checked = !enabled;
+  } finally { el.disabled = false; }
+}
+
+async function updateLabel(slug, label, el) {
+  el.disabled = true;
+  try {
+    const res = await fetch('/api/clinics?slug=' + encodeURIComponent(slug), {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ label })
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP ' + res.status);
+    await refreshAfterChange();
+  } catch (e) { alert('Chyba: ' + e.message); }
+  finally { el.disabled = false; }
+}
+
+function toggleTokenVis(slug, btn) {
+  const inp = document.querySelector(`#manageTable input[data-slug="${slug}"]`);
+  if (!inp) return;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
+async function copyTokenBySlug(slug, btn) {
+  const inp = document.querySelector(`#manageTable input[data-slug="${slug}"]`);
+  if (!inp) return;
+  const token = inp.dataset.real || inp.value;
+  try {
+    await navigator.clipboard.writeText(token);
+    const orig = btn.textContent;
+    btn.textContent = '✓ Zkopírováno';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch (e) { alert('Kopírování selhalo: ' + e.message); }
+}
+
+async function deleteClinic(slug, label) {
+  if (!confirm(`Smazat kliniku "${label}" (${slug})?\n\nKlíč zmizí z konfigurace.`)) return;
+  try {
+    const res = await fetch('/api/clinics?slug=' + encodeURIComponent(slug), { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP ' + res.status);
+    await renderManageTable();
+    await refreshAfterChange();
+  } catch (e) { alert('Chyba: ' + e.message); }
+}
+
+async function addClinic(event) {
+  event.preventDefault();
+  const form = event.target;
+  const btn = document.getElementById('addBtn');
+  const msg = document.getElementById('addMsg');
+  msg.className = 'form-msg'; msg.textContent = '';
+  btn.disabled = true; btn.textContent = 'Ověřuji…';
+  try {
+    const body = {
+      token: form.token.value.trim(),
+      env: form.env.value,
+      label: form.label.value.trim() || undefined
+    };
+    const res = await fetch('/api/clinics', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    msg.className = 'form-msg success';
+    msg.textContent = `✓ Přidáno: ${data.added.label} (${data.added.slug})`;
+    form.reset();
+    form.querySelector('input[value="dev"]').checked = true;
+    await renderManageTable();
+    await refreshAfterChange();
+  } catch (e) {
+    msg.className = 'form-msg error';
+    msg.textContent = 'Chyba: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ověřit a přidat';
+  }
+}
+
+async function refreshAfterChange() {
+  try {
+    const res = await fetch('/api/clinics', { cache: 'no-store' });
+    availableClinics = await res.json();
+    const validSlugs = new Set(availableClinics.map(c => c.slug));
+    selectedSlugs = new Set([...selectedSlugs].filter(s => validSlugs.has(s)));
+    if (selectedSlugs.size === 0 && availableClinics.length > 0) {
+      selectedSlugs = new Set(availableClinics.map(c => c.slug));
+    }
+    renderMs();
+  } catch (e) { console.error(e); }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeManageModal();
+});
+
+function updateMsLabel() {
+  const lbl = document.getElementById('msLabel');
+  const n = selectedSlugs.size, total = availableClinics.length;
+  if (n === 0) lbl.textContent = 'Žádná klinika';
+  else if (n === total) lbl.textContent = `Všechny kliniky (${n})`;
+  else if (n === 1) {
+    const slug = [...selectedSlugs][0];
+    lbl.textContent = (availableClinics.find(c => c.slug === slug) || {}).label || slug;
+  }
+  else lbl.textContent = `${n} klinik${n>=5?'':n>=2?'y':'a'} vybráno`;
+}
+
+function toggleMs(e) {
+  e.stopPropagation();
+  document.getElementById('msPanel').classList.toggle('open');
+}
+function msSelectAll() { selectedSlugs = new Set(availableClinics.map(c=>c.slug)); renderMs(); }
+function msSelectNone() { selectedSlugs.clear(); renderMs(); }
+
+document.addEventListener('click', e => {
+  const c = document.getElementById('msContainer');
+  if (c && !c.contains(e.target)) document.getElementById('msPanel').classList.remove('open');
+});
+
+async function loadData() {
+  setLoading(true);
+  if (selectedSlugs.size === 0) {
+    renderEmpty();
+    setLoading(false);
+    setBanner('', '');
+    return;
+  }
+  setBanner('loading', `Načítám data pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}…`);
+  try {
+    const slugs = [...selectedSlugs].join(',');
+    const res = await fetch('/api/data?slugs=' + encodeURIComponent(slugs), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    render(data);
+    if (data.errors && data.errors.length) {
+      setBanner('error', 'Chyby u: ' + data.errors.map(e=>`${e.label} (${e.error})`).join('; '));
+    } else {
+      setBanner('', '');
+    }
+  } catch (e) {
+    setBanner('error', 'Chyba: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderEmpty() {
+  document.getElementById('clinicName').textContent = 'Medevio Dashboard';
+  document.getElementById('clinicSub').textContent = 'Vyberte alespoň jednu kliniku z dropdownu vpravo nahoře';
+  document.getElementById('dataDate').textContent = '—';
+  ['kpi-total','kpi-resolved','kpi-open','kpi-patients','kpi-avg','kpi-median','kpi-p90','kpi-overdue'].forEach(id => document.getElementById(id).textContent = '—');
+  ['kpi-total-hint','kpi-resolved-hint','kpi-open-hint','kpi-patients-hint'].forEach(id => document.getElementById(id).textContent = '');
+  Object.values(charts).forEach(c => c && c.destroy());
+  document.querySelector('#tableOldest tbody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--ink-3);padding:20px;">Žádná data — vyberte kliniku</td></tr>';
+  document.querySelector('#tableOpen tbody').innerHTML = '';
+  document.querySelector('#tableRecent tbody').innerHTML = '';
+  document.getElementById('openCount').textContent = '0';
+}
+
+function render(payload) {
+  const now = new Date();
+  const DATA = payload.requests || [];
+  const requestUrl = (r) => `https://my.medevio.dev/${r.clinicSlug}/klinika/pozadavky?pozadavek=${r.id}`;
+  const clinicPill = (r) => `<span class="clinic-pill">${r.clinicLabel || r.clinicSlug}</span>`;
+
+  const clinics = payload.clinics || [];
+  if (clinics.length === 1) {
+    document.getElementById('clinicName').textContent = clinics[0].label;
+    document.getElementById('clinicSub').textContent = 'Slug: ' + clinics[0].slug + ' · Dashboard požadavků pacientů';
+  } else if (clinics.length > 1) {
+    document.getElementById('clinicName').textContent = clinics.length + ' klinik (agregováno)';
+    document.getElementById('clinicSub').textContent = clinics.map(c => c.label).join(' · ');
+  }
+  document.getElementById('dataDate').textContent = new Date(payload.fetchedAt).toLocaleString('cs-CZ');
+
+  const total = DATA.length;
+  const resolved = DATA.filter(r => r.doneAt);
+  const open = DATA.filter(r => !r.doneAt);
+  const patientsSet = new Set(DATA.map(r => r.patientName));
+  const byDoctor = DATA.filter(r => r.createdByDoctor).length;
+  const resolutionTimes = resolved.map(r => hoursBetween(r.createdAt, r.doneAt)).filter(h => h >= 0);
+  const meanH = mean(resolutionTimes);
+  const medianH = median(resolutionTimes);
+  const p90H = percentile(resolutionTimes, 90);
+  const overdue = open.filter(r => r.dueDate && new Date(r.dueDate) < now).length;
+
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-total-hint').textContent = `${byDoctor} od lékaře · ${total-byDoctor} od pacienta`;
+  document.getElementById('kpi-resolved').textContent = resolved.length;
+  document.getElementById('kpi-resolved-hint').textContent = total ? Math.round(resolved.length/total*100) + ' % z celkových' : '';
+  document.getElementById('kpi-open').textContent = open.length;
+  document.getElementById('kpi-open-hint').textContent = total ? Math.round(open.length/total*100) + ' % z celkových' : '';
+  document.getElementById('kpi-patients').textContent = patientsSet.size;
+  document.getElementById('kpi-patients-hint').textContent = patientsSet.size ? (total/patientsSet.size).toFixed(1) + ' požadavků / pacient' : '';
+  document.getElementById('kpi-avg').textContent = fmtHours(meanH);
+  document.getElementById('kpi-median').textContent = fmtHours(medianH);
+  document.getElementById('kpi-p90').textContent = fmtHours(p90H);
+  document.getElementById('kpi-overdue').textContent = overdue;
+
+  Object.values(charts).forEach(c => c && c.destroy());
+
+  const byType = {};
+  DATA.forEach(r => { const t = r.typeName || r.typeSid || '—'; byType[t] = (byType[t]||0)+1; });
+  const typeLabels = Object.keys(byType).sort((a,b)=>byType[b]-byType[a]);
+  charts.types = new Chart(document.getElementById('chartTypes'), {
+    type: 'doughnut',
+    data: { labels: typeLabels, datasets: [{ data: typeLabels.map(l=>byType[l]), backgroundColor: palette, borderWidth: 2, borderColor:'#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout:'60%', plugins: { legend: { position:'right', labels:{ boxWidth:10, padding:8 } } } }
+  });
+
+  const byMonth = {};
+  DATA.forEach(r => { const d = new Date(r.createdAt); const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); byMonth[key] = (byMonth[key]||0)+1; });
+  const monthKeys = Object.keys(byMonth).sort();
+  if (monthKeys.length > 1) {
+    const start = new Date(monthKeys[0]+'-01'); const end = new Date(monthKeys[monthKeys.length-1]+'-01');
+    const filled = [];
+    for (let d = new Date(start); d <= end; d.setMonth(d.getMonth()+1)) {
+      const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      filled.push(k); if (!(k in byMonth)) byMonth[k] = 0;
+    }
+    monthKeys.length = 0; filled.forEach(k => monthKeys.push(k));
+  }
+  charts.time = new Chart(document.getElementById('chartTime'), {
+    type: 'line',
+    data: { labels: monthKeys, datasets: [{ label: 'Požadavky', data: monthKeys.map(k=>byMonth[k]), borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.12)', fill:true, tension:.3, pointRadius:3, pointBackgroundColor:'#2563eb', borderWidth:2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks:{ precision:0 }, grid:{ color:'#eef1f6' } }, x: { grid:{ display:false } } } }
+  });
+
+  charts.author = new Chart(document.getElementById('chartAuthor'), {
+    type: 'doughnut',
+    data: { labels: ['Lékař','Pacient'], datasets: [{ data: [byDoctor, total-byDoctor], backgroundColor: ['#2563eb','#94a3b8'], borderWidth:2, borderColor:'#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout:'65%', plugins: { legend: { position:'bottom' } } }
+  });
+
+  const statusByType = {};
+  DATA.forEach(r => { const t = r.typeName || r.typeSid || '—'; if (!statusByType[t]) statusByType[t]={done:0,open:0}; if (r.doneAt) statusByType[t].done++; else statusByType[t].open++; });
+  const sbtLabels = Object.keys(statusByType).sort((a,b)=>(statusByType[b].done+statusByType[b].open)-(statusByType[a].done+statusByType[a].open));
+  charts.statusByType = new Chart(document.getElementById('chartStatusByType'), {
+    type: 'bar',
+    data: { labels: sbtLabels, datasets: [
+      { label: 'Vyřešeno', data: sbtLabels.map(l=>statusByType[l].done), backgroundColor: '#16a34a' },
+      { label: 'Otevřeno', data: sbtLabels.map(l=>statusByType[l].open), backgroundColor: '#ea580c' }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { position: 'top', align:'end' } }, scales: { x: { stacked: true, ticks:{ precision:0 }, grid:{ color:'#eef1f6' } }, y: { stacked: true, grid:{ display:false } } } }
+  });
+
+  const byPatient = {};
+  DATA.forEach(r => { byPatient[r.patientName] = (byPatient[r.patientName]||0)+1; });
+  const pats = Object.keys(byPatient).sort((a,b)=>byPatient[b]-byPatient[a]).slice(0,10);
+  charts.patients = new Chart(document.getElementById('chartPatients'), {
+    type: 'bar',
+    data: { labels: pats, datasets: [{ label:'Požadavky', data: pats.map(p=>byPatient[p]), backgroundColor:'#0ea5e9', borderRadius:6 }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display:false } }, scales: { x:{ beginAtZero:true, ticks:{ precision:0 }, grid:{ color:'#eef1f6' } }, y:{ grid:{ display:false } } } }
+  });
+
+  const resoByType = {};
+  resolved.forEach(r => { const t = r.typeName || r.typeSid || '—'; const h = hoursBetween(r.createdAt, r.doneAt); if (h<0) return; (resoByType[t] = resoByType[t] || []).push(h); });
+  const resoLabels = Object.keys(resoByType).sort((a,b)=>median(resoByType[b])-median(resoByType[a]));
+  const round1 = v => Math.round(v*10)/10;
+  charts.reso = new Chart(document.getElementById('chartResolution'), {
+    type: 'bar',
+    data: { labels: resoLabels, datasets: [
+      { label:'Průměr', data: resoLabels.map(l => round1(mean(resoByType[l]))),         backgroundColor:'#c4b5fd', borderRadius:4 },
+      { label:'Medián', data: resoLabels.map(l => round1(median(resoByType[l]))),       backgroundColor:'#7c3aed', borderRadius:4 },
+      { label:'P90',    data: resoLabels.map(l => round1(percentile(resoByType[l],90))), backgroundColor:'#4c1d95', borderRadius:4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { position:'top', align:'end' },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtHours(ctx.parsed.x)}` } } },
+      scales: { x:{ beginAtZero:true, grid:{ color:'#eef1f6' }, ticks:{ callback: v => v+' h' } }, y:{ grid:{ display:false } } } }
+  });
+
+  const oldestOpen = [...open].sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(0,5);
+  const oldestBody = document.querySelector('#tableOldest tbody'); oldestBody.innerHTML = '';
+  if (oldestOpen.length === 0) {
+    oldestBody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--ink-3);padding:20px;">Žádné otevřené požadavky 🎉</td></tr>';
+  } else {
+    oldestOpen.forEach(r => {
+      const ageDays = Math.floor((now - new Date(r.createdAt)) / 86400000);
+      const ageText = ageDays >= 365 ? (ageDays/365).toFixed(1)+' r' : ageDays+' dní';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${fmtDateShort(r.createdAt)}</td><td><strong>${ageText}</strong></td><td>${clinicPill(r)}</td><td>${r.patientName}</td><td>${r.typeName || r.typeSid}</td><td>${r.createdByDoctor ? '<span class="badge doctor">Lékař</span>' : '<span class="badge patient">Pacient</span>'}</td><td style="text-align:right;"><a class="link-btn" href="${requestUrl(r)}" target="_blank" rel="noopener">Otevřít ↗</a></td>`;
+      oldestBody.appendChild(tr);
+    });
+  }
+
+  const openSorted = [...open].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  document.getElementById('openCount').textContent = openSorted.length;
+  const openBody = document.querySelector('#tableOpen tbody'); openBody.innerHTML = '';
+  openSorted.forEach(r => {
+    const isOverdue = r.dueDate && new Date(r.dueDate) < now;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDateShort(r.createdAt)}</td><td>${clinicPill(r)}</td><td>${r.patientName}</td><td>${r.typeName || r.typeSid}</td><td>${r.createdByDoctor ? '<span class="badge doctor">Lékař</span>' : '<span class="badge patient">Pacient</span>'}</td><td>${isOverdue ? '<span class="badge overdue">Po termínu</span>' : '<span class="badge open">Otevřeno</span>'}</td>`;
+    openBody.appendChild(tr);
+  });
+
+  const recent = [...DATA].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,10);
+  const recentBody = document.querySelector('#tableRecent tbody'); recentBody.innerHTML = '';
+  recent.forEach(r => {
+    const reso = r.doneAt ? fmtHours(hoursBetween(r.createdAt, r.doneAt)) : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmtDateShort(r.createdAt)}</td><td>${clinicPill(r)}</td><td>${r.patientName}</td><td>${r.typeName || r.typeSid}</td><td>${reso}</td><td>${r.doneAt ? '<span class="badge done">Vyřešeno</span>' : '<span class="badge open">Otevřeno</span>'}</td>`;
+    recentBody.appendChild(tr);
+  });
+}
+
+initClinics();
+
+// ===== TABS =====
+function switchTab(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + name));
+  if (name === 'plans') loadPlans();
+  if (name === 'items') loadItems();
+}
+
+// ===== HELPERS =====
+function fmtIso(iso) { if (!iso) return '—'; return new Date(iso).toLocaleDateString('cs-CZ'); }
+function fmtIsoTime(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}); }
+const ROLE_CZ = { PATIENT:'Pacient', GP:'Praktický lékař', SURGEON:'Ortoped', ANEST:'Anesteziolog', NUTRI:'Nutriční terapeut', COORD:'Koordinátor' };
+const CAT_CZ  = { EXAM:'Vyšetření', DECISION:'Rozhodnutí', LOGISTIC:'Logistika', MEDICATION:'Medikace', APPOINTMENT:'Termín', EDUCATION:'Edukace' };
+const STATE_CZ = { NOT_STARTED:'Nezahájeno', PENDING_PATIENT:'Čeká na pacienta', PENDING_CLINICIAN:'Čeká na lékaře', IN_PROGRESS:'Probíhá', SUBMITTED:'Odevzdáno', NEEDS_REVIEW:'K posouzení', BLOCKED:'Blokováno', COMPLETED:'Hotovo', SKIPPED:'Přeskočeno', FAILED:'Selhalo', OVERDUE:'Po termínu' };
+const PHASE_CZ = { '0':'Iniciace', 'A':'Fáze A — Před edukačním seminářem', 'B1':'Fáze B1 — Návazná péče', 'B2':'Fáze B2 — Předoperační vyšetření', 'B3':'Fáze B3 — Medikace + anesteziologie', 'C':'Fáze C — Operace + propuštění' };
+const GATE_CZ = { 'hard':'tvrdá', 'soft':'měkká', 'none':'—' };
+function rolePill(r) { return `<span class="role-pill ${r||''}">${ROLE_CZ[r]||r||'?'}</span>`; }
+function catPill(c)  { return `<span class="cat-pill">${CAT_CZ[c]||c||'?'}</span>`; }
+function statePill(s) { return `<span class="state-pill ${s||''}">${STATE_CZ[s]||s||'?'}</span>`; }
+function escHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function planRequestUrl(item) { const env = item.clinicEnv || 'dev'; const host = env==='prod' ? 'my.medevio.cz' : 'my.medevio.dev'; return item.requestId ? `https://${host}/${item.clinicSlug}/klinika/pozadavky?pozadavek=${item.requestId}` : null; }
+
+// ===== PLANS LIST + DETAIL =====
+let allPlans = [];
+let selectedPlanId = null;
+
+async function loadPlans() {
+  const list = document.getElementById('plansList');
+  list.innerHTML = '<div style="text-align:center;color:var(--ink-3);padding:40px;">Načítám…</div>';
+  try {
+    allPlans = await (await fetch('/api/plans', { cache: 'no-store' })).json() || [];
+    renderPlansList();
+    document.getElementById('plansSummary').textContent = `${allPlans.length} plán${allPlans.length===1?'':allPlans.length>=5?'ů':'y'}`;
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);padding:20px;">Chyba: ${e.message}</div>`;
+  }
+}
+
+function renderPlansList() {
+  const list = document.getElementById('plansList');
+  if (!allPlans.length) {
+    list.innerHTML = '<div style="text-align:center;color:var(--ink-3);padding:40px;">Žádné plány. Klikněte „Nový plán" nahoře.</div>';
+    document.getElementById('planDetail').innerHTML = '<div class="plan-detail-empty">Žádný plán k zobrazení.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  allPlans.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'plan-card' + (p.id === selectedPlanId ? ' selected' : '');
+    card.onclick = () => selectPlan(p.id);
+    const pct = p.progress.total ? Math.round(p.progress.done / p.progress.total * 100) : 0;
+    const overd = p.progress.overdue ? `<span style="color:var(--danger);font-weight:700;">${p.progress.overdue} po termínu</span>` : '';
+    card.innerHTML = `<div class="pc-title">${escHtml(p.patientName||'(bez jména)')}</div>
+      <div class="pc-meta">${escHtml(p.templateTitle)} · <span class="clinic-pill">${escHtml(p.clinicLabel)}</span></div>
+      <div class="pc-meta">Operace: <strong>${fmtIso(p.surgeryDate)}</strong></div>
+      <div class="pc-progress"><span>${p.progress.done}/${p.progress.total}</span><div class="pc-bar"><div class="pc-bar-fill" style="width:${pct}%"></div></div><span>${pct}%</span></div>
+      ${overd ? '<div class="pc-meta" style="margin-top:4px;">'+overd+'</div>' : ''}`;
+    list.appendChild(card);
+  });
+  if (selectedPlanId && allPlans.find(p => p.id === selectedPlanId)) {
+    renderPlanDetail(allPlans.find(p => p.id === selectedPlanId));
+  } else if (allPlans.length > 0) {
+    selectPlan(allPlans[0].id);
+  }
+}
+
+async function selectPlan(id) {
+  selectedPlanId = id;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  try {
+    const p = await (await fetch('/api/plans/' + id, { cache: 'no-store' })).json();
+    if (p.error) throw new Error(p.error);
+    const idx = allPlans.findIndex(x => x.id === id);
+    if (idx >= 0) allPlans[idx] = p;
+    renderPlansList();
+    renderPlanDetail(p);
+  } catch (e) {
+    document.getElementById('planDetail').innerHTML = `<div style="color:var(--danger);padding:20px;">Chyba: ${e.message}</div>`;
+  }
+}
+
+function renderPlanDetail(p) {
+  const d = document.getElementById('planDetail');
+  const phases = ['0','A','B1','B2','B3','C'];
+  const phaseTitles = { '0':'Iniciace', 'A':'Fáze A — Před edukačním seminářem', 'B1':'Fáze B1 — Zajištění návazné péče', 'B2':'Fáze B2 — Předoperační vyšetření', 'B3':'Fáze B3 — Úprava medikace + anest. konzilium', 'C':'Fáze C — Operace a propuštění' };
+  const surgeryDateInput = p.surgeryDate ? new Date(p.surgeryDate).toISOString().slice(0,10) : '';
+  let html = `<div class="card" style="margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h2 style="margin:0;">${escHtml(p.patientName||'(bez jména)')} · <span class="clinic-pill">${escHtml(p.clinicLabel)}</span></h2>
+        <div class="cap" style="margin-top:4px;">${escHtml(p.templateTitle)} · ${p.progress.done}/${p.progress.total} hotovo · ${p.progress.overdue} po termínu</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label style="font-size:11px;color:var(--ink-2);font-weight:600;">Datum operace:</label>
+        <input type="date" id="planSurgery" value="${surgeryDateInput}" onchange="updatePlanDate('${p.id}', this.value)" style="padding:6px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        <button class="icon-btn danger" onclick="deletePlan('${p.id}', '${escHtml(p.patientName||'')}')">🗑 Smazat</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--ink-3);margin-top:8px;">⚠ Změna data operace nepřepočítává due dates jednotlivých kroků — termíny upravte ručně v Medevio.</div>
+  </div>`;
+  phases.forEach(ph => {
+    const steps = p.steps.filter(s => s.phase === ph);
+    if (!steps.length) return;
+    html += `<div class="phase-block"><div class="phase-head"><span>${phaseTitles[ph]||ph}</span><span style="font-weight:500;color:var(--ink-3);">${steps.length} kroků</span></div>`;
+    steps.sort((a,b) => (a.offsetDays||0) - (b.offsetDays||0));
+    steps.forEach(s => {
+      const cls = ['step-card', s.state==='COMPLETED'?'completed':'', s.state==='OVERDUE'?'overdue':''].filter(Boolean).join(' ');
+      const url = planRequestUrl({ ...s, clinicSlug: p.clinicSlug, clinicEnv: p.clinicEnv });
+      const dueText = s.dueDate ? fmtIso(s.dueDate) : `D${s.offsetDays>=0?'+':''}${s.offsetDays}`;
+      html += `<div class="${cls}" style="cursor:pointer;" onclick="openStepDetail('${p.id}','${s.code}')">
+        <span class="sc-code">${s.code}</span>
+        <div><div class="sc-title">${escHtml(s.title)}</div>${s.conditional?`<div class="sc-conditional">⚠ ${escHtml(s.conditional)}</div>`:''}</div>
+        <span>${rolePill(s.role)}${catPill(s.category)}</span>
+        <span style="font-size:12px;color:var(--ink-2);">📅 ${dueText}</span>
+        <span>${statePill(s.state)}</span>
+        <span>${url ? `<a class="link-btn" href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Otevřít ↗</a>` : '<span style="color:var(--ink-3);font-size:11px;">—</span>'}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  d.innerHTML = html;
+}
+
+async function updatePlanDate(id, date) {
+  if (!date) return;
+  try {
+    const res = await fetch('/api/plans/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ surgeryDate: new Date(date).toISOString() }) });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP '+res.status);
+    await selectPlan(id);
+  } catch (e) { alert('Chyba: ' + e.message); }
+}
+
+async function deletePlan(id, name) {
+  if (!confirm(`Smazat plán pacienta "${name}"?\n\nLokální záznam plánu se smaže. Požadavky v Medevio zůstanou (Medevio API neumožňuje jejich smazání).`)) return;
+  try {
+    const res = await fetch('/api/plans/' + id, { method:'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP '+res.status);
+    selectedPlanId = null;
+    await loadPlans();
+  } catch (e) { alert('Chyba: ' + e.message); }
+}
+
+// ===== NEW PLAN MODAL =====
+async function openNewPlanModal() {
+  document.getElementById('newPlanModal').classList.add('open');
+  document.getElementById('npMsg').textContent = '';
+  document.getElementById('newPlanForm').reset();
+  // load templates
+  const tplSel = document.getElementById('npTemplate');
+  tplSel.innerHTML = '<option>Načítám…</option>';
+  try {
+    let tpls = await (await fetch('/api/plan-templates', { cache: 'no-store' })).json();
+    if (!Array.isArray(tpls)) tpls = [tpls];
+    tplSel.innerHTML = tpls.map(t => `<option value="${t.id}">${escHtml(t.title)}</option>`).join('');
+  } catch (e) { tplSel.innerHTML = '<option>Chyba</option>'; }
+  // load clinics (only enabled)
+  const cSel = document.getElementById('npClinic');
+  cSel.innerHTML = availableClinics.map(c => `<option value="${c.slug}" data-env="${c.env}">${escHtml(c.label)} [${c.env}]</option>`).join('');
+  cSel.value = availableClinics[0] ? availableClinics[0].slug : '';
+  await loadPatientsForNewPlan();
+  // default surgery date = today + 90 days
+  const d = new Date(); d.setDate(d.getDate()+90);
+  document.getElementById('npSurgery').value = d.toISOString().slice(0,10);
+}
+function closeNewPlanModal() { document.getElementById('newPlanModal').classList.remove('open'); }
+
+async function loadPatientsForNewPlan() {
+  const cSel = document.getElementById('npClinic');
+  const pSel = document.getElementById('npPatient');
+  const opt = cSel.selectedOptions[0];
+  const slug = cSel.value, env = opt ? opt.dataset.env : 'dev';
+  if (!slug) { pSel.innerHTML = '<option value="">— Nejdřív vyberte kliniku —</option>'; return; }
+  pSel.innerHTML = '<option>Načítám…</option>';
+  try {
+    const list = await (await fetch(`/api/patients?clinicSlug=${encodeURIComponent(slug)}&clinicEnv=${env}`, { cache: 'no-store' })).json();
+    if (!Array.isArray(list)) throw new Error(list.error || 'neplatná odpověď');
+    list.sort((a,b) => `${a.surname} ${a.name}`.localeCompare(`${b.surname} ${b.name}`));
+    pSel.innerHTML = list.map(p => `<option value="${p.id}" data-name="${escHtml(p.name+' '+p.surname)}">${escHtml(p.surname+' '+p.name)}${p.identificationNumber?' · '+p.identificationNumber:''}</option>`).join('');
+  } catch (e) { pSel.innerHTML = `<option>Chyba: ${e.message}</option>`; }
+}
+
+async function createPlan(event) {
+  event.preventDefault();
+  const f = event.target;
+  const btn = document.getElementById('npBtn');
+  const msg = document.getElementById('npMsg');
+  msg.className = 'form-msg'; msg.textContent = '';
+  btn.disabled = true; btn.textContent = 'Zakládám požadavky v Medevio…';
+  try {
+    const cSel = document.getElementById('npClinic');
+    const pSel = document.getElementById('npPatient');
+    const env = cSel.selectedOptions[0]?.dataset.env || 'dev';
+    const patientName = pSel.selectedOptions[0]?.dataset.name || '';
+    const body = {
+      templateId: f.templateId.value,
+      clinicSlug: f.clinicSlug.value,
+      clinicEnv: env,
+      patientId: f.patientId.value,
+      patientName: patientName,
+      surgeryDate: new Date(f.surgeryDate.value + 'T08:00:00').toISOString()
+    };
+    const res = await fetch('/api/plans', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP '+res.status);
+    msg.className = 'form-msg success';
+    msg.textContent = `✓ Plán vytvořen, založeno ${data.createdSteps} požadavků v Medevio.${data.errors && data.errors.length ? ' Chyby: '+data.errors.length : ''}`;
+    selectedPlanId = data.planId;
+    await loadPlans();
+    setTimeout(closeNewPlanModal, 1500);
+  } catch (e) {
+    msg.className = 'form-msg error';
+    msg.textContent = 'Chyba: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Vytvořit plán a založit požadavky';
+  }
+}
+
+// ===== ITEMS TAB =====
+let allItems = [];
+let itemsSort = { col: 'dueDate', dir: 'asc' };
+
+async function loadItems() {
+  const wrap = document.getElementById('itemsTableWrap');
+  wrap.innerHTML = '<div style="text-align:center;color:var(--ink-3);padding:40px;">Načítám…</div>';
+  try {
+    allItems = await (await fetch('/api/plan-items', { cache: 'no-store' })).json() || [];
+    populateItemFilters();
+    renderItems();
+  } catch (e) {
+    wrap.innerHTML = `<div style="color:var(--danger);padding:20px;">Chyba: ${e.message}</div>`;
+  }
+}
+
+function populateItemFilters() {
+  const fc = document.getElementById('fltClinic');
+  const fp = document.getElementById('fltPlan');
+  const clinics = [...new Set(allItems.map(i => i.clinicLabel))].sort();
+  const tpls = [...new Set(allItems.map(i => i.templateTitle))].sort();
+  fc.innerHTML = '<option value="">Všechny</option>' + clinics.map(c => `<option>${escHtml(c)}</option>`).join('');
+  fp.innerHTML = '<option value="">Všechny</option>' + tpls.map(t => `<option>${escHtml(t)}</option>`).join('');
+}
+
+function clearItemFilters() {
+  ['fltClinic','fltPlan','fltRole','fltPhase','fltCategory','fltState'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fltPatient').value = '';
+  document.getElementById('fltOverdue').checked = false;
+  document.getElementById('fltOpen').checked = false;
+  renderItems();
+}
+
+function renderItems() {
+  const wrap = document.getElementById('itemsTableWrap');
+  if (!allItems.length) {
+    wrap.innerHTML = '<div style="text-align:center;color:var(--ink-3);padding:40px;">Žádné položky. Vytvořte nejdřív plán v záložce „Léčebné plány".</div>';
+    document.getElementById('itemsSummary').textContent = '0 položek';
+    return;
+  }
+  const fltClinic = document.getElementById('fltClinic').value;
+  const fltPlan = document.getElementById('fltPlan').value;
+  const fltPatient = document.getElementById('fltPatient').value.toLowerCase();
+  const fltRole = document.getElementById('fltRole').value;
+  const fltPhase = document.getElementById('fltPhase').value;
+  const fltCategory = document.getElementById('fltCategory').value;
+  const fltState = document.getElementById('fltState').value;
+  const fltOverdue = document.getElementById('fltOverdue').checked;
+  const fltOpen = document.getElementById('fltOpen').checked;
+
+  let items = allItems.filter(i => {
+    if (fltClinic && i.clinicLabel !== fltClinic) return false;
+    if (fltPlan && i.templateTitle !== fltPlan) return false;
+    if (fltPatient && !(i.patientName||'').toLowerCase().includes(fltPatient)) return false;
+    if (fltRole && i.role !== fltRole) return false;
+    if (fltPhase && i.phase !== fltPhase) return false;
+    if (fltCategory && i.category !== fltCategory) return false;
+    if (fltState && i.state !== fltState) return false;
+    if (fltOverdue && i.state !== 'OVERDUE') return false;
+    if (fltOpen && i.state === 'COMPLETED') return false;
+    return true;
+  });
+
+  // sort
+  const c = itemsSort.col, dir = itemsSort.dir === 'asc' ? 1 : -1;
+  items.sort((a,b) => {
+    let va = a[c], vb = b[c];
+    if (va == null) return 1; if (vb == null) return -1;
+    if (typeof va === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb)) * dir;
+  });
+
+  document.getElementById('itemsSummary').textContent = `${items.length} z ${allItems.length} položek`;
+
+  const cols = [
+    { key:'clinicLabel', label:'Klinika' },
+    { key:'patientName', label:'Pacient' },
+    { key:'templateTitle', label:'Plán' },
+    { key:'phase', label:'Fáze' },
+    { key:'stepCode', label:'Kód' },
+    { key:'stepTitle', label:'Krok' },
+    { key:'role', label:'Role' },
+    { key:'category', label:'Kategorie' },
+    { key:'dueDate', label:'Termín' },
+    { key:'state', label:'Stav' },
+    { key:null, label:'Akce' }
+  ];
+  let html = `<table class="items-table"><thead><tr>`;
+  cols.forEach(co => {
+    if (co.key) {
+      const cls = co.key === itemsSort.col ? 'sorted' : '';
+      const arr = co.key === itemsSort.col ? (itemsSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+      html += `<th class="${cls}" onclick="sortItems('${co.key}')">${co.label}${arr}</th>`;
+    } else html += `<th>${co.label}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+  items.forEach(i => {
+    const cls = (i.state === 'OVERDUE' ? 'overdue' : '') + (i.state === 'COMPLETED' ? ' completed' : '');
+    const url = planRequestUrl(i);
+    html += `<tr class="${cls}">
+      <td><span class="clinic-pill">${escHtml(i.clinicLabel)}</span></td>
+      <td>${escHtml(i.patientName)}</td>
+      <td style="font-size:11px;color:var(--ink-3);">${escHtml(i.templateTitle)}</td>
+      <td><strong>${i.phase}</strong></td>
+      <td style="font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--ink-3);">${i.stepCode}</td>
+      <td>${escHtml(i.stepTitle)}</td>
+      <td>${rolePill(i.role)}</td>
+      <td>${catPill(i.category)}</td>
+      <td>${fmtIso(i.dueDate)}</td>
+      <td>${statePill(i.state)}</td>
+      <td>${url?`<a class="link-btn" href="${url}" target="_blank">Otevřít ↗</a>`:'<span style="color:var(--ink-3);font-size:11px;">—</span>'}</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  wrap.innerHTML = html;
+}
+function sortItems(col) {
+  if (itemsSort.col === col) { itemsSort.dir = itemsSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { itemsSort.col = col; itemsSort.dir = 'asc'; }
+  renderItems();
+}
+
+// ===== DETAIL KROKU =====
+let currentStepDetail = null;
+
+async function openStepDetail(planId, stepCode) {
+  document.getElementById('stepDetailModal').classList.add('open');
+  document.getElementById('sdHeader').textContent = `${stepCode} — načítám…`;
+  document.getElementById('sdContent').innerHTML = '<div style="color:var(--ink-3);text-align:center;padding:40px;">Načítám…</div>';
+  try {
+    const plan = await (await fetch('/api/plans/' + planId, { cache: 'no-store' })).json();
+    const step = plan.steps.find(s => s.code === stepCode);
+    if (!step) throw new Error('Krok nenalezen');
+    currentStepDetail = { planId, stepCode, plan, step };
+    renderStepDetail();
+  } catch (e) {
+    document.getElementById('sdContent').innerHTML = `<div style="color:var(--danger);padding:20px;">Chyba: ${e.message}</div>`;
+  }
+}
+
+function closeStepDetail() {
+  document.getElementById('stepDetailModal').classList.remove('open');
+  currentStepDetail = null;
+}
+
+function renderStepDetail() {
+  const { planId, stepCode, plan, step } = currentStepDetail;
+  document.getElementById('sdHeader').innerHTML = `<span style="font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink-3);">${step.code}</span> &nbsp; ${escHtml(step.title)}`;
+  const url = planRequestUrl({ ...step, clinicSlug: plan.clinicSlug, clinicEnv: plan.clinicEnv });
+  const requiresList = (step.requires && step.requires.length) ? step.requires.map(r => `<code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:11px;">${r}</code>`).join(' ') : '<em style="color:var(--ink-3);font-size:12px;">žádné</em>';
+  const stateOpts = ['NOT_STARTED','PENDING_PATIENT','PENDING_CLINICIAN','IN_PROGRESS','SUBMITTED','NEEDS_REVIEW','BLOCKED','COMPLETED','SKIPPED','FAILED','OVERDUE']
+    .map(s => `<option value="${s}" ${step.state===s?'selected':''}>${STATE_CZ[s]}</option>`).join('');
+  const html = `
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:10px 18px;font-size:13px;margin-bottom:20px;">
+      <div style="color:var(--ink-2);font-weight:600;">Pacient</div><div><strong>${escHtml(plan.patientName)}</strong></div>
+      <div style="color:var(--ink-2);font-weight:600;">Klinika</div><div><span class="clinic-pill">${escHtml(plan.clinicLabel)}</span></div>
+      <div style="color:var(--ink-2);font-weight:600;">Plán</div><div>${escHtml(plan.templateTitle)}</div>
+      <div style="color:var(--ink-2);font-weight:600;">Datum operace</div><div><strong>${fmtIso(plan.surgeryDate)}</strong></div>
+      <div style="color:var(--ink-2);font-weight:600;">Fáze</div><div><strong>${PHASE_CZ[step.phase]||step.phase}</strong></div>
+      <div style="color:var(--ink-2);font-weight:600;">Role</div><div>${rolePill(step.role)}</div>
+      <div style="color:var(--ink-2);font-weight:600;">Kategorie</div><div>${catPill(step.category)}</div>
+      <div style="color:var(--ink-2);font-weight:600;">Závaznost</div><div>${GATE_CZ[step.gate]||step.gate}</div>
+      <div style="color:var(--ink-2);font-weight:600;">Posun od op.</div><div>D${step.offsetDays>=0?'+':''}${step.offsetDays} dní</div>
+      <div style="color:var(--ink-2);font-weight:600;">Plánovaný termín</div><div><strong>${fmtIso(step.dueDate)}</strong></div>
+      <div style="color:var(--ink-2);font-weight:600;">Termín v Medevio</div><div>${step.actualDueDate ? fmtIsoTime(step.actualDueDate) : '<em style="color:var(--ink-3);">—</em>'} <span style="color:var(--ink-3);font-size:11px;">(může se lišit od plánovaného)</span></div>
+      <div style="color:var(--ink-2);font-weight:600;">Předpoklady</div><div>${requiresList}</div>
+      <div style="color:var(--ink-2);font-weight:600;">Vidí pacient</div><div>${step.patientVisible ? '✓ ano' : '✗ ne'}</div>
+      ${step.conditional ? `<div style="color:var(--warning);font-weight:600;">Podmínka</div><div style="color:var(--warning);">${escHtml(step.conditional)}</div>` : ''}
+    </div>
+
+    <div style="background:var(--bg);padding:14px;border-radius:10px;margin-bottom:18px;">
+      <div style="font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:6px;">Pokyny pro pacienta (z šablony)</div>
+      <div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">${escHtml(step.userNote)}</div>
+    </div>
+
+    <div style="background:#fffbeb;border:1px solid #fde68a;padding:12px 14px;border-radius:10px;margin-bottom:18px;font-size:12px;color:#92400e;">
+      ⚠ Medevio API neumožňuje předat vlastní text požadavku. V Medevio aplikaci pacient uvidí pouze typ požadavku „<strong>${escHtml(step.medevioTitle || step.ecrfName || step.ecrfSid || '?')}</strong>" a termín. Vlastní pokyny můžete pacientovi předat osobně, nebo je nahrát jako přílohu přímo v Medevio aplikaci.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+      <div>
+        <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:6px;">Stav (lokálně, v rámci dashboardu)</label>
+        <select id="sdState" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">${stateOpts}</select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:6px;">Typ v Medevio</label>
+        <div style="padding:8px 10px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--ink-2);">${step.ecrfSid || '—'}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <label style="display:block;font-size:11px;color:var(--ink-2);font-weight:600;text-transform:uppercase;margin-bottom:6px;">Interní poznámka koordinátora (jen lokálně)</label>
+      <textarea id="sdLocalNote" rows="3" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" placeholder="Poznámka, kterou pacient nevidí (jen v dashboardu)…">${escHtml(step.localNote||'')}</textarea>
+    </div>
+
+    <div id="sdMsg" class="form-msg" style="margin-bottom:14px;"></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn" onclick="saveStepLocal()">💾 Uložit lokální údaje</button>
+      ${step.state !== 'COMPLETED' && step.requestId ? `<button class="btn" style="background:var(--success);" onclick="resolveStep()">✓ Označit jako vyřešené v Medevio</button>` : ''}
+      ${url ? `<a class="btn" style="background:var(--ink-1);text-decoration:none;display:inline-flex;align-items:center;gap:8px;" href="${url}" target="_blank" rel="noopener">↗ Otevřít v Medevio</a>` : ''}
+    </div>
+  `;
+  document.getElementById('sdContent').innerHTML = html;
+}
+
+async function saveStepLocal() {
+  const { planId, stepCode } = currentStepDetail;
+  const msg = document.getElementById('sdMsg');
+  msg.className = 'form-msg'; msg.textContent = '';
+  try {
+    const body = {
+      state: document.getElementById('sdState').value,
+      note: document.getElementById('sdLocalNote').value
+    };
+    const res = await fetch(`/api/plans/${planId}/steps/${stepCode}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP '+res.status);
+    msg.className = 'form-msg success'; msg.textContent = '✓ Uloženo';
+    setTimeout(() => { closeStepDetail(); selectPlan(planId); }, 800);
+  } catch (e) { msg.className = 'form-msg error'; msg.textContent = 'Chyba: ' + e.message; }
+}
+
+async function resolveStep() {
+  const { planId, stepCode, step } = currentStepDetail;
+  if (!confirm(`Označit krok "${step.title}" jako vyřešený v Medevio?\n\nTato akce zavolá Medevio API a požadavek bude označen jako hotový.`)) return;
+  const msg = document.getElementById('sdMsg');
+  msg.className = 'form-msg'; msg.textContent = '';
+  try {
+    const res = await fetch(`/api/plans/${planId}/steps/${stepCode}/resolve`, { method:'POST' });
+    if (!res.ok) throw new Error((await res.json()).error || 'HTTP '+res.status);
+    msg.className = 'form-msg success'; msg.textContent = '✓ Označeno jako vyřešené v Medevio';
+    setTimeout(() => { closeStepDetail(); selectPlan(planId); }, 1000);
+  } catch (e) { msg.className = 'form-msg error'; msg.textContent = 'Chyba: ' + e.message; }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && currentStepDetail) closeStepDetail(); });
+</script>
+</body>
+</html>

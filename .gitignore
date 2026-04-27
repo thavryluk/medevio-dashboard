@@ -1,0 +1,18 @@
+# API klíče - NIKDY do veřejného repa
+clinics.json
+
+# Pacientská data + lokální stav plánů
+plans.json
+
+# Generované / dočasné soubory
+*.tmp
+test-step.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editory
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,16 @@
+[
+  {
+    "label":   "MUDr. Jméno Příjmení",
+    "slug":    "mudr-prijmeni",
+    "token":   "<Personal Access Token z Medevio - kontakt podpora@medevio.cz>",
+    "enabled": true,
+    "env":     "dev"
+  },
+  {
+    "label":   "Druhá klinika",
+    "slug":    "druha-klinika",
+    "token":   "<dalsi-token>",
+    "enabled": true,
+    "env":     "prod"
+  }
+]
