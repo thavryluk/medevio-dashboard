@@ -83,6 +83,31 @@ function Invoke-Medevio([string]$Token, [string]$Env, [string]$Method, [string]$
     return Invoke-RestMethod -Uri "$base$Path" -Method $m -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
 }
 
+function Fetch-AllPatientRequests([object]$Clinic, [hashtable]$Filter = $null, [int]$MaxPages = 50) {
+    # Medevio /patientRequests/search ma hard cap limit=100. Strankujeme dokud neni stranka prazdna,
+    # nebo dosahneme MaxPages (50 = 5000 zaznamu, bezpecna pojistka proti runaway).
+    $all = @()
+    $offset = 0
+    $pageSize = 100
+    for ($page = 0; $page -lt $MaxPages; $page++) {
+        $body = @{ pagination = @{ limit = $pageSize; offset = $offset } }
+        if ($Filter) { $body.filter = $Filter }
+        $bodyJson = $body | ConvertTo-Json -Compress -Depth 5
+        try {
+            $resp = Invoke-Medevio $Clinic.token $Clinic.env 'POST' "/clinics/$($Clinic.slug)/patientRequests/search" $bodyJson
+        } catch {
+            Write-Host "  WARN paginace selhala na offset=${offset}: $($_.Exception.Message)"
+            break
+        }
+        $batch = @($resp.data)
+        if ($batch.Count -eq 0) { break }
+        $all += $batch
+        if ($batch.Count -lt $pageSize) { break }   # posledni stranka
+        $offset += $pageSize
+    }
+    return ,$all
+}
+
 function Discover-Clinic([string]$Token, [string]$Env) {
     $resp = Invoke-Medevio $Token $Env 'POST' '/clinics/search'
     $first = $resp.data | Select-Object -First 1
@@ -95,13 +120,14 @@ function Fetch-ClinicData([object]$Clinic) {
     $token = $Clinic.token
     $env   = $Clinic.env
     $clinicsResp = Invoke-Medevio $token $env 'POST' '/clinics/search'
-    $reqsResp    = Invoke-Medevio $token $env 'POST' "/clinics/$slug/patientRequests/search"
+    $allReqs     = Fetch-AllPatientRequests $Clinic   # paginates - returns ALL requests
     $patsResp    = Invoke-Medevio $token $env 'POST' "/clinics/$slug/patients/search"
     $usrsResp    = Invoke-Medevio $token $env 'POST' "/clinics/$slug/users/search"
     $clinicMeta  = $clinicsResp.data | Where-Object { $_.slug -eq $slug } | Select-Object -First 1
     $label       = if ($clinicMeta) { $clinicMeta.name } else { $Clinic.label }
+    Write-Host "  $slug : nacteno $(@($allReqs).Count) pozadavku celkem"
 
-    $slim = @($reqsResp.data | ForEach-Object {
+    $slim = @($allReqs | ForEach-Object {
         $p = $_.patient; $e = $_.userECRF
         [PSCustomObject]@{
             id                = $_.id
@@ -553,14 +579,17 @@ function Create-PlanInMedevio([object]$Plan, [object]$Clinic, [object]$Template)
 }
 
 # Stahne aktualni stav requestu pres patientRequests/search a vrati doneAt + dueDate.
-function Fetch-RequestsByIds([object]$Clinic, [string[]]$RequestIds) {
+function Fetch-RequestsByIds([object]$Clinic, [string[]]$RequestIds, [string]$PatientId = $null) {
+    # Krome IDs prijima i volitelny patientId filter pro efektivnejsi search
+    # (jinak by se musely strankovat vsechny pozadavky kliniky kvuli ID matchi).
     if (-not $RequestIds -or $RequestIds.Count -eq 0) { return @{} }
     try {
-        $resp = Invoke-Medevio $Clinic.token $Clinic.env 'POST' "/clinics/$($Clinic.slug)/patientRequests/search"
+        $filter = if ($PatientId) { @{ patientId = $PatientId } } else { $null }
+        $allReqs = Fetch-AllPatientRequests $Clinic $filter
         $idSet = @{}
         foreach ($id in $RequestIds) { $idSet[$id] = $true }
         $out = @{}
-        foreach ($r in $resp.data) {
+        foreach ($r in $allReqs) {
             if ($idSet.ContainsKey($r.id)) {
                 $out[$r.id] = [PSCustomObject]@{
                     id         = $r.id
@@ -594,7 +623,7 @@ function Plan-WithLiveData([object]$Plan, [object]$Template) {
             $stepRequestIds += $p.Value.requestId
         }
     }
-    $live = if ($clinic) { Fetch-RequestsByIds $clinic $stepRequestIds } else { @{} }
+    $live = if ($clinic) { Fetch-RequestsByIds $clinic $stepRequestIds $Plan.patientId } else { @{} }
     $surgery = [datetime]::Parse($Plan.surgeryDate)
 
     $stepDetails = @()
