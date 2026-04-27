@@ -154,8 +154,8 @@ function Parse-Query([System.Net.HttpListenerRequest]$Req) {
 
 function Send-JsonArray($Res, $Items, [int]$Status = 200) {
     # Helper pro endpointy vracejici kolekce - PS pipeline strippuje prazdne pole na $null,
-    # coz by zlomilo UI ocekavajici pole. @($Items) zarucuje array typ.
-    $arr = @($Items)
+    # coz by zlomilo UI ocekavajici pole. Vyhazujeme $null prvky.
+    $arr = if ($null -eq $Items) { @() } else { @($Items | Where-Object { $null -ne $_ }) }
     $json = if ($arr.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $arr -Depth 10 -Compress }
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $Res.StatusCode = $Status
