@@ -4,6 +4,10 @@ clinics.json
 # Pacientská data + lokální stav plánů
 plans.json
 
+# Cache souborů obsahuje pacientská data - NIKDY do gitu
+cache-done-*.json
+cache-*.json
+
 # Generované / dočasné soubory
 *.tmp
 test-step.pdf
