@@ -83,30 +83,94 @@ function Invoke-Medevio([string]$Token, [string]$Env, [string]$Method, [string]$
     return Invoke-RestMethod -Uri "$base$Path" -Method $m -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
 }
 
-# In-memory cache pro DONE pozadavky (per clinic+env). DONE se meni zridka,
-# muzeme cachovat 24 h. ACTIVE jdou vzdy cerstve.
+# Persistent cache pro DONE pozadavky. Soubor /data/cache-done-<slug>-<env>.json,
+# v RAM hashtable pro rychly pristup. Pro suspended Fly machine prezije.
+# Strategie: vzdy vratime, co mame (i stale). Pokud cache neexistuje/stara, oznacime
+# stale=true a kliknuti 'Vc. hotovych' v UI vyvola force refresh.
 $script:DoneCache = @{}
 $script:DoneCacheTtlHours = 24
+
+function Get-DoneCacheFile([object]$Clinic) {
+    $safeName = "$($Clinic.slug)-$($Clinic.env)" -replace '[^a-zA-Z0-9-]', '_'
+    return Join-Path $DataDir "cache-done-$safeName.json"
+}
+
+function Load-DoneCacheFromDisk([object]$Clinic) {
+    $file = Get-DoneCacheFile $Clinic
+    if (-not (Test-Path $file)) { return $null }
+    try {
+        $raw = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json
+        return [PSCustomObject]@{
+            items     = @($raw.items)
+            fetchedAt = [datetime]::Parse($raw.fetchedAt)
+            count     = $raw.count
+        }
+    } catch {
+        Write-Host "  WARN nelze nacist $file : $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Save-DoneCacheToDisk([object]$Clinic, [object]$Entry) {
+    $file = Get-DoneCacheFile $Clinic
+    $payload = [PSCustomObject]@{
+        slug      = $Clinic.slug
+        env       = $Clinic.env
+        items     = $Entry.items
+        fetchedAt = $Entry.fetchedAt.ToString('o')
+        count     = $Entry.count
+    }
+    $json = $payload | ConvertTo-Json -Depth 12 -Compress
+    $tmp = "$file.tmp"
+    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding $false))
+    Move-Item -Force $tmp $file
+}
 
 function Get-CachedDoneRequests([object]$Clinic, [bool]$ForceRefresh = $false) {
     $key = "$($Clinic.slug)|$($Clinic.env)"
     $now = Get-Date
-    $entry = $script:DoneCache[$key]
-    $stale = $ForceRefresh -or -not $entry -or (($now - $entry.fetchedAt).TotalHours -ge $script:DoneCacheTtlHours)
-    if ($stale) {
-        $reasonText = if ($ForceRefresh) { 'force refresh' } elseif (-not $entry) { 'no cache' } else { 'TTL expired' }
-        Write-Host "  $($Clinic.slug) DONE refresh cache ($reasonText)"
-        $items = Fetch-AllPatientRequests $Clinic @{ state = 'DONE' }
-        $script:DoneCache[$key] = [PSCustomObject]@{
-            items = $items
-            fetchedAt = $now
-            count = @($items).Count
+
+    # Lazy load z disku do RAM pri prvnim pristupu
+    if (-not $script:DoneCache.ContainsKey($key)) {
+        $disk = Load-DoneCacheFromDisk $Clinic
+        if ($disk) {
+            $script:DoneCache[$key] = $disk
+            $ageHr = [int]($now - $disk.fetchedAt).TotalHours
+            Write-Host "  $($Clinic.slug) DONE nacteno z disku ($($disk.count) pozadavku, stari $ageHr h)"
         }
+    }
+
+    $entry = $script:DoneCache[$key]
+    $isStale = -not $entry -or (($now - $entry.fetchedAt).TotalHours -ge $script:DoneCacheTtlHours)
+
+    if ($ForceRefresh -or -not $entry) {
+        # Bud uzivatel pozadal o refresh, nebo zadna cache neni - musime nacist sync
+        $reasonText = if ($ForceRefresh) { 'force refresh' } else { 'no cache' }
+        Write-Host "  $($Clinic.slug) DONE refresh ($reasonText)"
+        $items = Fetch-AllPatientRequests $Clinic @{ state = 'DONE' }
+        $entry = [PSCustomObject]@{
+            items     = $items
+            fetchedAt = $now
+            count     = @($items).Count
+        }
+        $script:DoneCache[$key] = $entry
+        try { Save-DoneCacheToDisk $Clinic $entry } catch { Write-Host "  WARN ukladani cache: $($_.Exception.Message)" }
+        $isStale = $false
+    } elseif ($isStale) {
+        # Cache je stara, ale neco mame - vratime stale, oznacime
+        $ageHr = [int]($now - $entry.fetchedAt).TotalHours
+        Write-Host "  $($Clinic.slug) DONE stale z cache (stari $ageHr h - klikni 'Vc. hotovych' pro refresh)"
     } else {
         $ageMin = [int]($now - $entry.fetchedAt).TotalMinutes
-        Write-Host "  $($Clinic.slug) DONE z cache ($($entry.count) pozadavku, stari $ageMin min)"
+        Write-Host "  $($Clinic.slug) DONE z cache ($($entry.count) pozadavku, stari $ageMin min, fresh)"
     }
-    return $script:DoneCache[$key]
+
+    return [PSCustomObject]@{
+        items     = $entry.items
+        fetchedAt = $entry.fetchedAt
+        count     = $entry.count
+        stale     = $isStale
+    }
 }
 
 function Fetch-AllPatientRequests([object]$Clinic, [hashtable]$Filter = $null, [int]$MaxPages = 50) {
@@ -192,6 +256,7 @@ function Fetch-ClinicData([object]$Clinic, [bool]$RefreshDone = $false) {
             doneCount     = $doneEntry.count
             doneFetchedAt = $doneEntry.fetchedAt.ToString('o')
             doneAgeMin    = [int]((Get-Date) - $doneEntry.fetchedAt).TotalMinutes
+            doneStale     = [bool]$doneEntry.stale
             activeCount   = @($activeReqs).Count
         }
     }
@@ -966,6 +1031,28 @@ try {
                             $out = @($resp.data | ForEach-Object { [PSCustomObject]@{ id=$_.id; name=$_.name; surname=$_.surname; identificationNumber=$_.identificationNumber; sex=$_.sex; dob=$_.dob } })
                             Send-JsonArray $res $out
                         } catch { Send-Json $res @{ error = $_.Exception.Message } 500 }
+                    }
+                }
+            }
+            elseif ($path -match '^/api/admin/cache-upload/([a-zA-Z0-9_-]+)$' -and $req.HttpMethod -eq 'POST') {
+                # Adminskeho-only endpoint pro nahrani cache souboru. Vyzaduje
+                # X-Admin-Token header shodny s env ADMIN_TOKEN.
+                $providedToken = $req.Headers['X-Admin-Token']
+                if (-not $env:ADMIN_TOKEN) { Send-Json $res @{ error = 'ADMIN_TOKEN nenastaveno' } 503 }
+                elseif ($providedToken -ne $env:ADMIN_TOKEN) { Send-Json $res @{ error = 'Neplatny X-Admin-Token' } 403 }
+                else {
+                    $safeName = $matches[1]
+                    if ($safeName -notmatch '^[a-zA-Z0-9_-]+$') { Send-Json $res @{ error = 'Neplatne jmeno' } 400 }
+                    else {
+                        # Cti raw bytes
+                        $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                        $body = $sr.ReadToEnd(); $sr.Close()
+                        $file = Join-Path $DataDir "cache-done-$safeName.json"
+                        [System.IO.File]::WriteAllText($file, $body, (New-Object System.Text.UTF8Encoding $false))
+                        # Invalidate in-memory cache (nacte se z disku pri pristim pristupu)
+                        $script:DoneCache.Clear()
+                        Write-Host "  ADMIN upload: $file ($($body.Length) chars)"
+                        Send-Json $res @{ uploaded = $safeName; bytes = $body.Length }
                     }
                 }
             }

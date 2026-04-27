@@ -720,11 +720,12 @@ function render(payload) {
     document.getElementById('clinicSub').textContent = clinics.map(c => c.label).join(' · ');
   }
   document.getElementById('dataDate').textContent = new Date(payload.fetchedAt).toLocaleString('cs-CZ');
-  // Cache info per clinic
+  // Cache info per clinic - + stale indicator
   const cacheLines = (payload.clinics || []).filter(c => c.cacheInfo).map(c => {
     const ci = c.cacheInfo;
     const ageHr = ci.doneAgeMin >= 60 ? `${Math.floor(ci.doneAgeMin/60)} h` : `${ci.doneAgeMin} min`;
-    return `${escHtml(c.label)}: ${ci.activeCount} aktivních (čerstvé) + ${ci.doneCount} hotových (cache ${ageHr})`;
+    const staleMark = ci.doneStale ? ' <span style="color:var(--warning);font-weight:700;">⚠ stale</span>' : '';
+    return `${escHtml(c.label)}: ${ci.activeCount} akt. (čerstvé) + ${ci.doneCount} hotových (cache ${ageHr})${staleMark}`;
   });
   document.getElementById('cacheInfo').innerHTML = cacheLines.join(' · ');
 
