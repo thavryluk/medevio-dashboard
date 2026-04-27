@@ -426,6 +426,10 @@
   </div>
 </div>
 
+<footer style="margin-top:40px;padding:16px 0;text-align:center;font-size:11px;color:var(--ink-3);border-top:1px solid var(--border);">
+  Medevio Dashboard · v<span id="appVersion">…</span> · build <span id="appBuildDate">…</span> · <a href="https://github.com/thavryluk/medevio-dashboard" target="_blank" rel="noopener" style="color:inherit;">GitHub</a>
+</footer>
+
 </div><!-- /app -->
 
 <script>
@@ -861,6 +865,12 @@ function render(payload) {
 }
 
 initClinics();
+
+// Verze v patce
+fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
+  document.getElementById('appVersion').textContent = v.version || '?';
+  document.getElementById('appBuildDate').textContent = v.buildDate || '?';
+}).catch(() => {});
 
 // ===== TABS =====
 function switchTab(name) {

@@ -1073,6 +1073,13 @@ try {
                     }
                 }
             }
+            elseif ($path -eq '/api/version' -and $req.HttpMethod -eq 'GET') {
+                Send-Json $res ([PSCustomObject]@{
+                    version    = if ($env:APP_VERSION)    { $env:APP_VERSION }    else { 'dev-local' }
+                    buildDate  = if ($env:APP_BUILD_DATE) { $env:APP_BUILD_DATE } else { 'unknown' }
+                    serverTime = (Get-Date).ToString('o')
+                })
+            }
             elseif ($path -eq '/api/data' -and $req.HttpMethod -eq 'GET') {
                 $q = Parse-Query $req
                 $slugs = @()

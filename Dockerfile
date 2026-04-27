@@ -6,6 +6,12 @@ WORKDIR /app
 # Kod aplikace - vse co je staticke
 COPY dashboard_server.ps1 medevio-dashboard-live.html plan-templates.json ./
 
+# Build args predane pres 'fly deploy --build-arg VERSION=... --build-arg BUILD_DATE=...'
+ARG VERSION=dev
+ARG BUILD_DATE=unknown
+ENV APP_VERSION=$VERSION
+ENV APP_BUILD_DATE=$BUILD_DATE
+
 # Default env pro kontejner
 # DATA_DIR  = mountpoint pro persistentni soubory (clinics.json, plans.json)
 # HOST = "+" znamena vsechny interfaces (potreba ve Fly za load balancerem)
