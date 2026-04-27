@@ -152,6 +152,19 @@ function Parse-Query([System.Net.HttpListenerRequest]$Req) {
     return $h
 }
 
+function Send-JsonArray($Res, $Items, [int]$Status = 200) {
+    # Helper pro endpointy vracejici kolekce - PS pipeline strippuje prazdne pole na $null,
+    # coz by zlomilo UI ocekavajici pole. @($Items) zarucuje array typ.
+    $arr = @($Items)
+    $json = if ($arr.Count -eq 0) { '[]' } else { ConvertTo-Json -InputObject $arr -Depth 10 -Compress }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $Res.StatusCode = $Status
+    $Res.ContentType = 'application/json; charset=utf-8'
+    $Res.Headers['Cache-Control'] = 'no-store'
+    $Res.ContentLength64 = $bytes.Length
+    $Res.OutputStream.Write($bytes, 0, $bytes.Length)
+}
+
 function Send-Json($Res, $Obj, [int]$Status = 200) {
     $Res.StatusCode = $Status
     if ($null -eq $Obj) { $json = 'null' }
@@ -638,10 +651,10 @@ try {
                 $res.OutputStream.Write($bytes, 0, $bytes.Length)
             }
             elseif ($path -eq '/api/clinics' -and $req.HttpMethod -eq 'GET') {
-                Send-Json $res (Public-ClinicList)
+                Send-JsonArray $res (Public-ClinicList)
             }
             elseif ($path -eq '/api/clinics/full' -and $req.HttpMethod -eq 'GET') {
-                Send-Json $res (Full-ClinicList)
+                Send-JsonArray $res (Full-ClinicList)
             }
             elseif ($path -eq '/api/clinics') {
                 Handle-ClinicCRUD $req $res
@@ -667,7 +680,7 @@ try {
                     foreach ($t in $templates) { if ($t.id -eq $p.templateId) { $myTpl = $t; break } }
                     if ($myTpl) { $out += (Plan-WithLiveData $p $myTpl) }
                 }
-                Send-Json $res $out
+                Send-JsonArray $res $out
             }
             elseif ($path -match '^/api/plans/[a-f0-9-]+$' -and $req.HttpMethod -eq 'GET') {
                 $planId = $path.Substring('/api/plans/'.Length)
@@ -835,7 +848,7 @@ try {
                         }
                     }
                 }
-                Send-Json $res $items
+                Send-JsonArray $res $items
             }
             elseif ($path -eq '/api/patients' -and $req.HttpMethod -eq 'GET') {
                 $q = Parse-Query $req
@@ -849,7 +862,7 @@ try {
                         try {
                             $resp = Invoke-Medevio $clinic.token $clinic.env 'POST' "/clinics/$($clinic.slug)/patients/search"
                             $out = @($resp.data | ForEach-Object { [PSCustomObject]@{ id=$_.id; name=$_.name; surname=$_.surname; identificationNumber=$_.identificationNumber; sex=$_.sex; dob=$_.dob } })
-                            Send-Json $res $out
+                            Send-JsonArray $res $out
                         } catch { Send-Json $res @{ error = $_.Exception.Message } 500 }
                     }
                 }
