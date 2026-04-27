@@ -1,7 +1,7 @@
 # Deploy na Fly.io s automatickym embedovanim verze a datumu buildu.
-# Spust z root slozky projektu.
 
-$ErrorActionPreference = 'Stop'
+# Pozn: ZAMERNE bez 'Stop' EAP - flyctl pisuje neskodny noise na stderr,
+# coz by jinak shodilo skript pred dokoncenim deploy.
 Set-Location $PSScriptRoot
 
 $fly = "$env:USERPROFILE\.fly\bin\flyctl.exe"
@@ -17,3 +17,11 @@ Write-Host "    Build date: $buildDate"
 Write-Host ""
 
 & $fly deploy --remote-only --build-arg "VERSION=$version$dirty" --build-arg "BUILD_DATE=$buildDate"
+$ec = $LASTEXITCODE
+Write-Host ""
+if ($ec -eq 0) {
+    Write-Host "==> Deploy hotov: https://medevio-dashboard.fly.dev/" -ForegroundColor Green
+} else {
+    Write-Host "!!  Deploy selhal (exit $ec)" -ForegroundColor Red
+    exit $ec
+}
