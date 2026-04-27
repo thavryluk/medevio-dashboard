@@ -38,7 +38,20 @@ if ($needSeed) {
         Write-Host "Vytvoren prazdny $ConfigFile"
     }
 }
-if (-not (Test-Path $PlansFile))         { '[]' | Out-File -FilePath $PlansFile  -Encoding utf8 -NoNewline }
+$plansNeedSeed = -not (Test-Path $PlansFile)
+if (-not $plansNeedSeed) {
+    $existingPlans = (Get-Content $PlansFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if (-not $existingPlans -or $existingPlans -eq '[]') { $plansNeedSeed = $true }
+}
+if ($plansNeedSeed) {
+    if ($env:PLANS_JSON_SEED_B64) {
+        Write-Host "Seeduji $PlansFile z env PLANS_JSON_SEED_B64 (base64)"
+        $plansBytes = [Convert]::FromBase64String($env:PLANS_JSON_SEED_B64)
+        [System.IO.File]::WriteAllBytes($PlansFile, $plansBytes)
+    } else {
+        '[]' | Out-File -FilePath $PlansFile -Encoding utf8 -NoNewline
+    }
+}
 if (-not (Test-Path $PlanTemplatesFile)) { Write-Host "ERR: chybi $PlanTemplatesFile"; exit 1 }
 
 function Get-Clinics {
