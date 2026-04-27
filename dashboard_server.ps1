@@ -5,9 +5,9 @@ $ApiBaseProd = 'https://api.medevio.cz/external/v1'
 function Resolve-ApiBase([string]$Env) { if ($Env -eq 'prod') { $ApiBaseProd } else { $ApiBaseDev } }
 
 # Konfigurace pres env var (pro Docker / Fly.io); fallback na lokalni cesty
-$Port    = if ($env:PORT)     { [int]$env:PORT }     else { 8766 }
-$Host    = if ($env:HOST)     { $env:HOST }          else { 'localhost' }
-$DataDir = if ($env:DATA_DIR) { $env:DATA_DIR }      else { $PSScriptRoot }
+$Port     = if ($env:PORT)     { [int]$env:PORT }     else { 8766 }
+$BindHost = if ($env:HOST)     { $env:HOST }          else { 'localhost' }
+$DataDir  = if ($env:DATA_DIR) { $env:DATA_DIR }      else { $PSScriptRoot }
 
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir -Force | Out-Null }
 
@@ -616,7 +616,7 @@ function Plan-WithLiveData([object]$Plan, [object]$Template) {
 
 # ===== KONEC PLANY =====
 
-$prefix = "http://${Host}:$Port/"
+$prefix = "http://${BindHost}:$Port/"
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($prefix)
 try { $listener.Start() } catch { Write-Host "ERR: $($_.Exception.Message)"; exit 1 }
