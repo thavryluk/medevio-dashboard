@@ -26,7 +26,11 @@ if (-not $needSeed) {
     if (-not $existing -or $existing -eq '[]') { $needSeed = $true }
 }
 if ($needSeed) {
-    if ($env:CLINICS_JSON_SEED) {
+    if ($env:CLINICS_JSON_SEED_B64) {
+        Write-Host "Seeduji $ConfigFile z env CLINICS_JSON_SEED_B64 (base64)"
+        $jsonBytes = [Convert]::FromBase64String($env:CLINICS_JSON_SEED_B64)
+        [System.IO.File]::WriteAllBytes($ConfigFile, $jsonBytes)
+    } elseif ($env:CLINICS_JSON_SEED) {
         Write-Host "Seeduji $ConfigFile z env CLINICS_JSON_SEED"
         [System.IO.File]::WriteAllText($ConfigFile, $env:CLINICS_JSON_SEED, (New-Object System.Text.UTF8Encoding $false))
     } else {
