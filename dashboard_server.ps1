@@ -83,6 +83,32 @@ function Invoke-Medevio([string]$Token, [string]$Env, [string]$Method, [string]$
     return Invoke-RestMethod -Uri "$base$Path" -Method $m -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
 }
 
+# In-memory cache pro DONE pozadavky (per clinic+env). DONE se meni zridka,
+# muzeme cachovat 24 h. ACTIVE jdou vzdy cerstve.
+$script:DoneCache = @{}
+$script:DoneCacheTtlHours = 24
+
+function Get-CachedDoneRequests([object]$Clinic, [bool]$ForceRefresh = $false) {
+    $key = "$($Clinic.slug)|$($Clinic.env)"
+    $now = Get-Date
+    $entry = $script:DoneCache[$key]
+    $stale = $ForceRefresh -or -not $entry -or (($now - $entry.fetchedAt).TotalHours -ge $script:DoneCacheTtlHours)
+    if ($stale) {
+        $reasonText = if ($ForceRefresh) { 'force refresh' } elseif (-not $entry) { 'no cache' } else { 'TTL expired' }
+        Write-Host "  $($Clinic.slug) DONE refresh cache ($reasonText)"
+        $items = Fetch-AllPatientRequests $Clinic @{ state = 'DONE' }
+        $script:DoneCache[$key] = [PSCustomObject]@{
+            items = $items
+            fetchedAt = $now
+            count = @($items).Count
+        }
+    } else {
+        $ageMin = [int]($now - $entry.fetchedAt).TotalMinutes
+        Write-Host "  $($Clinic.slug) DONE z cache ($($entry.count) pozadavku, stari $ageMin min)"
+    }
+    return $script:DoneCache[$key]
+}
+
 function Fetch-AllPatientRequests([object]$Clinic, [hashtable]$Filter = $null, [int]$MaxPages = 50) {
     # Medevio /patientRequests/search ma hard cap limit=100. Strankujeme dokud neni stranka prazdna,
     # nebo dosahneme MaxPages (50 = 5000 zaznamu, bezpecna pojistka proti runaway).
@@ -115,17 +141,25 @@ function Discover-Clinic([string]$Token, [string]$Env) {
     return $first
 }
 
-function Fetch-ClinicData([object]$Clinic) {
+function Fetch-ClinicData([object]$Clinic, [bool]$RefreshDone = $false) {
     $slug  = $Clinic.slug
     $token = $Clinic.token
     $env   = $Clinic.env
     $clinicsResp = Invoke-Medevio $token $env 'POST' '/clinics/search'
-    $allReqs     = Fetch-AllPatientRequests $Clinic   # paginates - returns ALL requests
+
+    # ACTIVE - vzdy cerstve (typicky < 300, < 3 stranky, < 3 s)
+    $activeReqs  = Fetch-AllPatientRequests $Clinic @{ state = 'ACTIVE' }
+    Write-Host "  $slug ACTIVE: $(@($activeReqs).Count) (cerstve)"
+
+    # DONE - z cache (24 h TTL), nebo force refresh
+    $doneEntry   = Get-CachedDoneRequests $Clinic $RefreshDone
+    $doneReqs    = $doneEntry.items
+    $allReqs     = @($activeReqs) + @($doneReqs)
+
     $patsResp    = Invoke-Medevio $token $env 'POST' "/clinics/$slug/patients/search"
     $usrsResp    = Invoke-Medevio $token $env 'POST' "/clinics/$slug/users/search"
     $clinicMeta  = $clinicsResp.data | Where-Object { $_.slug -eq $slug } | Select-Object -First 1
     $label       = if ($clinicMeta) { $clinicMeta.name } else { $Clinic.label }
-    Write-Host "  $slug : nacteno $(@($allReqs).Count) pozadavku celkem"
 
     $slim = @($allReqs | ForEach-Object {
         $p = $_.patient; $e = $_.userECRF
@@ -154,10 +188,16 @@ function Fetch-ClinicData([object]$Clinic) {
         patientsCount = @($patsResp.data).Count
         usersCount    = @($usrsResp.data).Count
         requests      = $slim
+        cacheInfo     = [PSCustomObject]@{
+            doneCount     = $doneEntry.count
+            doneFetchedAt = $doneEntry.fetchedAt.ToString('o')
+            doneAgeMin    = [int]((Get-Date) - $doneEntry.fetchedAt).TotalMinutes
+            activeCount   = @($activeReqs).Count
+        }
     }
 }
 
-function Build-Payload([string[]]$SelectedSlugs) {
+function Build-Payload([string[]]$SelectedSlugs, [bool]$RefreshDone = $false) {
     $all = Get-Clinics | Where-Object { $_.enabled }
     $selected = if ($SelectedSlugs -and $SelectedSlugs.Count -gt 0) {
         @($all | Where-Object { $SelectedSlugs -contains $_.slug })
@@ -166,8 +206,8 @@ function Build-Payload([string[]]$SelectedSlugs) {
     $clinicResults = @(); $allRequests = @(); $totalPatients = 0; $totalUsers = 0; $errors = @()
     foreach ($c in $selected) {
         try {
-            $r = Fetch-ClinicData $c
-            $clinicResults += [PSCustomObject]@{ slug=$r.slug; label=$r.label; env=$r.env; patientsCount=$r.patientsCount; usersCount=$r.usersCount; requestsCount=@($r.requests).Count }
+            $r = Fetch-ClinicData $c $RefreshDone
+            $clinicResults += [PSCustomObject]@{ slug=$r.slug; label=$r.label; env=$r.env; patientsCount=$r.patientsCount; usersCount=$r.usersCount; requestsCount=@($r.requests).Count; cacheInfo=$r.cacheInfo }
             $allRequests   += $r.requests
             $totalPatients += $r.patientsCount
             $totalUsers    += $r.usersCount
@@ -933,7 +973,8 @@ try {
                 $q = Parse-Query $req
                 $slugs = @()
                 if ($q.ContainsKey('slugs') -and $q['slugs']) { $slugs = $q['slugs'].Split(',') | Where-Object { $_ } }
-                Send-Json $res (Build-Payload $slugs)
+                $refreshDone = $q.ContainsKey('refreshDone') -and ($q['refreshDone'] -eq '1' -or $q['refreshDone'] -eq 'true')
+                Send-Json $res (Build-Payload $slugs $refreshDone)
             }
             else {
                 $res.StatusCode = 404

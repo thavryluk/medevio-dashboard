@@ -226,6 +226,7 @@
     <div class="meta">
       <div>Zdroj: <strong>Medevio External API</strong> (dev)</div>
       <div>Poslední aktualizace: <strong id="dataDate">—</strong></div>
+      <div id="cacheInfo" style="font-size:11px;color:var(--ink-3);"></div>
     </div>
     <div class="ms" id="msContainer">
       <button type="button" class="ms-btn" id="msBtn" onclick="toggleMs(event)">
@@ -243,9 +244,13 @@
         </div>
       </div>
     </div>
-    <button class="btn" id="btnRefresh" onclick="loadData()">
+    <button class="btn" id="btnRefresh" onclick="loadData()" title="Obnovit aktivní požadavky (hotové z cache)">
       <span id="btnIcon">↻</span>
       <span id="btnText">Obnovit</span>
+    </button>
+    <button class="btn" id="btnRefreshDone" onclick="loadData(true)" style="background:var(--ink-2);" title="Obnovit i hotové požadavky (vynutí čerstvý fetch DONE z Medevia, pomalé)">
+      <span>↻↻</span>
+      <span style="font-size:12px;">Vč. hotových</span>
     </button>
   </div>
 </header>
@@ -657,7 +662,7 @@ document.addEventListener('click', e => {
   if (c && !c.contains(e.target)) document.getElementById('msPanel').classList.remove('open');
 });
 
-async function loadData() {
+async function loadData(refreshDone) {
   setLoading(true);
   if (selectedSlugs.size === 0) {
     renderEmpty();
@@ -665,10 +670,12 @@ async function loadData() {
     setBanner('', '');
     return;
   }
-  setBanner('loading', `Načítám data pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}…`);
+  const refreshSuffix = refreshDone ? ' (včetně hotových — pomalé)' : '';
+  setBanner('loading', `Načítám data pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}${refreshSuffix}…`);
   try {
     const slugs = [...selectedSlugs].join(',');
-    const res = await fetch('/api/data?slugs=' + encodeURIComponent(slugs), { cache: 'no-store' });
+    const url = '/api/data?slugs=' + encodeURIComponent(slugs) + (refreshDone ? '&refreshDone=1' : '');
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -713,6 +720,13 @@ function render(payload) {
     document.getElementById('clinicSub').textContent = clinics.map(c => c.label).join(' · ');
   }
   document.getElementById('dataDate').textContent = new Date(payload.fetchedAt).toLocaleString('cs-CZ');
+  // Cache info per clinic
+  const cacheLines = (payload.clinics || []).filter(c => c.cacheInfo).map(c => {
+    const ci = c.cacheInfo;
+    const ageHr = ci.doneAgeMin >= 60 ? `${Math.floor(ci.doneAgeMin/60)} h` : `${ci.doneAgeMin} min`;
+    return `${escHtml(c.label)}: ${ci.activeCount} aktivních (čerstvé) + ${ci.doneCount} hotových (cache ${ageHr})`;
+  });
+  document.getElementById('cacheInfo').innerHTML = cacheLines.join(' · ');
 
   const total = DATA.length;
   const resolved = DATA.filter(r => r.doneAt);
