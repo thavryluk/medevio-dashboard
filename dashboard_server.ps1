@@ -1044,15 +1044,21 @@ try {
                     $safeName = $matches[1]
                     if ($safeName -notmatch '^[a-zA-Z0-9_-]+$') { Send-Json $res @{ error = 'Neplatne jmeno' } 400 }
                     else {
-                        # Cti raw bytes
-                        $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                        # Podpora gzip pres Content-Encoding header (snizi 10MB JSON na ~1MB)
+                        $isGzip = $req.Headers['Content-Encoding'] -eq 'gzip'
+                        $stream = $req.InputStream
+                        if ($isGzip) {
+                            $stream = New-Object System.IO.Compression.GZipStream($stream, [System.IO.Compression.CompressionMode]::Decompress)
+                        }
+                        $sr = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
                         $body = $sr.ReadToEnd(); $sr.Close()
                         $file = Join-Path $DataDir "cache-done-$safeName.json"
                         [System.IO.File]::WriteAllText($file, $body, (New-Object System.Text.UTF8Encoding $false))
                         # Invalidate in-memory cache (nacte se z disku pri pristim pristupu)
                         $script:DoneCache.Clear()
-                        Write-Host "  ADMIN upload: $file ($($body.Length) chars)"
-                        Send-Json $res @{ uploaded = $safeName; bytes = $body.Length }
+                        $gzMark = if ($isGzip) { ' (gzip)' } else { '' }
+                        Write-Host "  ADMIN upload: $file ($($body.Length) chars$gzMark)"
+                        Send-Json $res @{ uploaded = $safeName; bytes = $body.Length; gzip = $isGzip }
                     }
                 }
             }
