@@ -16,10 +16,16 @@ $PlansFile         = Join-Path $DataDir       'plans.json'
 $PlanTemplatesFile = Join-Path $PSScriptRoot  'plan-templates.json'
 $HtmlFile          = Join-Path $PSScriptRoot  'medevio-dashboard-live.html'
 
-# Pri prvnim startu seed clinics.json bud z env var CLINICS_JSON_SEED (Fly secret),
-# nebo zalozit prazdny seznam. Po prvnim zapisu pres UI uz seed nepouzit
-# (file na volume prezije restart).
-if (-not (Test-Path $ConfigFile)) {
+# Seed clinics.json z env var CLINICS_JSON_SEED (Fly secret) pokud:
+#  - soubor neexistuje, NEBO
+#  - existuje ale je prazdny ([] nebo 0 B)
+# Po pridani kliniky pres UI uz nebude prazdny a env var se ignoruje.
+$needSeed = -not (Test-Path $ConfigFile)
+if (-not $needSeed) {
+    $existing = (Get-Content $ConfigFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if (-not $existing -or $existing -eq '[]') { $needSeed = $true }
+}
+if ($needSeed) {
     if ($env:CLINICS_JSON_SEED) {
         Write-Host "Seeduji $ConfigFile z env CLINICS_JSON_SEED"
         [System.IO.File]::WriteAllText($ConfigFile, $env:CLINICS_JSON_SEED, (New-Object System.Text.UTF8Encoding $false))
