@@ -1044,21 +1044,32 @@ try {
                     $safeName = $matches[1]
                     if ($safeName -notmatch '^[a-zA-Z0-9_-]+$') { Send-Json $res @{ error = 'Neplatne jmeno' } 400 }
                     else {
-                        # Podpora gzip pres Content-Encoding header (snizi 10MB JSON na ~1MB)
+                        # Streamujem primo na disk (bez celeho do RAM) - vhodne pro velke uploady (10+ MB).
+                        # Podpora gzip pres Content-Encoding: gzip (decompress on-the-fly).
                         $isGzip = $req.Headers['Content-Encoding'] -eq 'gzip'
-                        $stream = $req.InputStream
-                        if ($isGzip) {
-                            $stream = New-Object System.IO.Compression.GZipStream($stream, [System.IO.Compression.CompressionMode]::Decompress)
-                        }
-                        $sr = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
-                        $body = $sr.ReadToEnd(); $sr.Close()
                         $file = Join-Path $DataDir "cache-done-$safeName.json"
-                        [System.IO.File]::WriteAllText($file, $body, (New-Object System.Text.UTF8Encoding $false))
-                        # Invalidate in-memory cache (nacte se z disku pri pristim pristupu)
+                        $tmp = "$file.tmp"
+                        $inStream = $req.InputStream
+                        if ($isGzip) {
+                            $inStream = New-Object System.IO.Compression.GZipStream($inStream, [System.IO.Compression.CompressionMode]::Decompress)
+                        }
+                        $outStream = [System.IO.File]::Create($tmp)
+                        $buf = New-Object byte[] 65536
+                        $totalBytes = 0
+                        try {
+                            while (($read = $inStream.Read($buf, 0, $buf.Length)) -gt 0) {
+                                $outStream.Write($buf, 0, $read)
+                                $totalBytes += $read
+                            }
+                        } finally {
+                            $outStream.Close()
+                            if ($isGzip) { $inStream.Close() }
+                        }
+                        Move-Item -Force $tmp $file
                         $script:DoneCache.Clear()
                         $gzMark = if ($isGzip) { ' (gzip)' } else { '' }
-                        Write-Host "  ADMIN upload: $file ($($body.Length) chars$gzMark)"
-                        Send-Json $res @{ uploaded = $safeName; bytes = $body.Length; gzip = $isGzip }
+                        Write-Host "  ADMIN upload: $file ($totalBytes bytes$gzMark)"
+                        Send-Json $res @{ uploaded = $safeName; bytes = $totalBytes; gzip = $isGzip }
                     }
                 }
             }
