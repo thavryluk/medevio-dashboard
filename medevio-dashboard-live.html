@@ -224,7 +224,7 @@
   </div>
   <div class="right">
     <div class="meta">
-      <div>Zdroj: <strong>Medevio External API</strong> (dev)</div>
+      <div>Zdroj: <strong>Medevio External API</strong> (dev) · <span id="appVersionTop" style="font-size:10px;color:var(--ink-3);font-family:ui-monospace,Consolas,monospace;">v?</span></div>
       <div>Poslední aktualizace: <strong id="dataDate">—</strong></div>
       <div id="cacheInfo" style="font-size:11px;color:var(--ink-3);"></div>
     </div>
@@ -866,10 +866,15 @@ function render(payload) {
 
 initClinics();
 
-// Verze v patce
+// Verze - malicka kopie nahore + plne dole v patce
 fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
-  document.getElementById('appVersion').textContent = v.version || '?';
-  document.getElementById('appBuildDate').textContent = v.buildDate || '?';
+  const ver = v.version || '?';
+  const bd  = v.buildDate || '?';
+  document.getElementById('appVersion').textContent = ver;
+  document.getElementById('appBuildDate').textContent = bd;
+  const top = document.getElementById('appVersionTop');
+  top.textContent = `v${ver} · ${bd}`;
+  top.title = `Verze: ${ver}\nBuild: ${bd}`;
 }).catch(() => {});
 
 // ===== TABS =====
