@@ -16,8 +16,18 @@ $PlansFile         = Join-Path $DataDir       'plans.json'
 $PlanTemplatesFile = Join-Path $PSScriptRoot  'plan-templates.json'
 $HtmlFile          = Join-Path $PSScriptRoot  'medevio-dashboard-live.html'
 
-# V Dockeru zaciname s prazdnym configem - kliniky se pridaji pres UI
-if (-not (Test-Path $ConfigFile))        { '[]' | Out-File -FilePath $ConfigFile -Encoding utf8 -NoNewline; Write-Host "Vytvoren prazdny $ConfigFile" }
+# Pri prvnim startu seed clinics.json bud z env var CLINICS_JSON_SEED (Fly secret),
+# nebo zalozit prazdny seznam. Po prvnim zapisu pres UI uz seed nepouzit
+# (file na volume prezije restart).
+if (-not (Test-Path $ConfigFile)) {
+    if ($env:CLINICS_JSON_SEED) {
+        Write-Host "Seeduji $ConfigFile z env CLINICS_JSON_SEED"
+        [System.IO.File]::WriteAllText($ConfigFile, $env:CLINICS_JSON_SEED, (New-Object System.Text.UTF8Encoding $false))
+    } else {
+        '[]' | Out-File -FilePath $ConfigFile -Encoding utf8 -NoNewline
+        Write-Host "Vytvoren prazdny $ConfigFile"
+    }
+}
 if (-not (Test-Path $PlansFile))         { '[]' | Out-File -FilePath $PlansFile  -Encoding utf8 -NoNewline }
 if (-not (Test-Path $PlanTemplatesFile)) { Write-Host "ERR: chybi $PlanTemplatesFile"; exit 1 }
 
