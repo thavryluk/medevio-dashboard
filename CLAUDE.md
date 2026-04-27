@@ -1,6 +1,12 @@
-# Project Context (pro Claude Code session na jakémkoli PC)
+# CLAUDE.md — kontext pro Claude Code
 
-> Tento soubor je „kontextová náloživka" — když začínáš novou Claude session, nech ji načíst tento soubor jako první. Obsahuje vše, co Claude potřebuje vědět o projektu, uživateli a historii.
+> **Automaticky načítáno** Claude Code při startu session v této složce.
+> Cloud-portable: tento soubor je v Dropboxu i v GitHubu, takže každá Claude session na jakémkoli PC začíná se stejným kontextem.
+>
+> **Co je kde uložené:**
+> - Tento `CLAUDE.md` + dokumentace + zdrojáky → **GitHub repo** (https://github.com/thavryluk/medevio-dashboard)
+> - Sensitive data (`clinics.json`, `plans.json`) → **Fly secrets** + lokální Dropbox folder (gitignored)
+> - Per-PC technické věci (flyctl auth, git credentials) → lokální, vyžadují re-login po `setup-new-pc.ps1`
 
 ## Uživatel
 

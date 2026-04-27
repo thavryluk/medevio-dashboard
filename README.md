@@ -91,9 +91,23 @@ fly deploy             # nový build + redeploy, ~1-2 min
 - `fly ssh console` — shell uvnitř kontejneru
 - `fly secrets set FOO=bar` — nastavit env var (šifrovaně)
 
-## Memory Claude Code
+## Setup na novém PC
 
-Persistentní kontext pro budoucí Claude session je v:
-`C:\Users\thavr\.claude\projects\C--Users-thavr\memory\`
+```powershell
+# 1. Pockat na Dropbox sync (vznikne C:\Dropbox\claude\medevio-dashboard\)
+# 2. Spustit setup script (idempotentni - jen co chybi se doinstaluje)
+powershell -ExecutionPolicy Bypass -File C:\Dropbox\claude\medevio-dashboard\setup-new-pc.ps1
+```
 
-Po přesunu na Dropbox aktualizuj v memory soubor `medevio_dashboard_state.md` na novou cestu (`C:\Dropbox\claude\medevio-dashboard\`).
+Skript zkontroluje/nainstaluje **git**, **flyctl**, nastaví git identity, a pomůže s `fly auth login` přes prohlížeč.
+
+## Kontext pro Claude Code
+
+Soubor [`CLAUDE.md`](./CLAUDE.md) v rootu repa je **automaticky načítán** Claude Code session při startu z této složky. Obsahuje:
+- profil uživatele
+- popis projektu, tech stacku, architektury
+- známé Medevio API quirky
+- workflow pro deploy
+- otevřené body
+
+Když pokračuješ na novém PC: stačí `cd C:\Dropbox\claude\medevio-dashboard` a spustit Claude Code — kontext se naváže automaticky.
