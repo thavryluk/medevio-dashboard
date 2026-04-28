@@ -210,8 +210,93 @@
   .items-table tr.overdue td { background: #fef9f9; }
   .items-table tr.completed td { opacity: 0.6; }
 
-  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .col-4, .col-6, .col-8 { grid-column: span 12; } }
-  @media (max-width: 640px) { .app { padding: 16px; } .kpis { grid-template-columns: repeat(2, 1fr); } header .meta { text-align: left; } }
+  /* ===== RESPONZIVITA ===== */
+
+  /* Tablet (do 1100 px) - existujici */
+  @media (max-width: 1100px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .col-4, .col-6, .col-8 { grid-column: span 12; }
+    .plans-layout { grid-template-columns: 1fr; }
+  }
+
+  /* Stredni mobil (do 768 px) */
+  @media (max-width: 768px) {
+    .app { padding: 14px; }
+    header { gap: 10px; }
+    header h1 { font-size: 22px; }
+    header .sub { font-size: 13px; }
+    header .right { width: 100%; flex-wrap: wrap; gap: 8px; }
+    header .meta { flex: 1 1 100%; text-align: left; }
+    .ms { flex: 1 1 100%; }
+    .ms-btn { width: 100%; min-width: 0; }
+    .ms-panel { left: 0; right: 0; min-width: 0; }
+    .btn { flex: 1 1 auto; padding: 8px 12px; font-size: 13px; }
+    #btnRefreshDone span:nth-child(2) { display: none; }   /* skryt text 'Vc. hotovych' */
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .kpi { padding: 12px 14px; }
+    .kpi .value { font-size: 24px; }
+    .kpi .label { font-size: 11px; }
+    .reso-stats .val { font-size: 14px; }
+    .reso-stats .row.median .val { font-size: 16px; }
+    .card { padding: 14px 16px; }
+    .card h2 { font-size: 14px; }
+    .grid { gap: 10px; }
+    /* Step cards - vertikalne misto 6-col gridu */
+    .step-card { grid-template-columns: 1fr; gap: 6px; padding: 12px; }
+    .step-card .sc-code { font-size: 10px; }
+    .step-card .sc-title { font-size: 13px; }
+    /* Tabulky - horizontalni scroll */
+    table { font-size: 12px; }
+    table th, table td { padding: 8px 6px; }
+    .items-table { display: block; overflow-x: auto; }
+    /* Modaly - skoro celoobrazovkove */
+    .modal-bg { padding: 8px; align-items: flex-start; }
+    .modal { max-height: 96vh; max-width: 100%; border-radius: 12px; }
+    .modal-head { padding: 14px 16px; }
+    .modal-head h2 { font-size: 16px; }
+    .modal-body { padding: 14px 16px 18px; }
+    /* Manage clinics tabulka - skryt slug sloupec, token zuzit */
+    .clin-table th:nth-child(3), .clin-table td:nth-child(3) { display: none; }
+    .clin-table .actions { flex-wrap: wrap; gap: 3px; }
+    .clin-table .icon-btn { padding: 4px 6px; font-size: 11px; }
+    /* Add-form 4-col -> 1-col */
+    .add-form { grid-template-columns: 1fr; }
+    .add-form .field, .add-form .add-btn, .add-form .form-msg, .add-form .field[style*="grid-column"] { grid-column: 1; }
+    /* Filter bar - vetsi gap mezi prvky */
+    .filter-bar { padding: 10px; gap: 8px; }
+    .filter-bar .f-group { flex: 1 1 calc(50% - 4px); }
+    .filter-bar select, .filter-bar input { min-width: 0; width: 100%; }
+    .filter-bar .clear-btn { flex: 1 1 100%; }
+    /* Tabs - horizontalni scroll pokud nepa */
+    .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+    .tabs button { padding: 10px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+    /* Plan detail header - dat datum a smazat pod sebe */
+    #planDetail h2 { font-size: 16px; }
+    /* Step detail modal grid - 1-col */
+    #sdContent > div:first-child { grid-template-columns: 1fr !important; gap: 6px 0 !important; }
+    #sdContent > div:first-child > div:nth-child(odd) { font-size: 11px; padding-top: 6px; border-top: 1px solid var(--border); }
+    #sdContent > div:first-child > div:nth-child(odd):first-child { border-top: 0; padding-top: 0; }
+    /* New plan form - pole s grid-column inline */
+    #newPlanForm .field[style*="grid-column"] { grid-column: 1; }
+  }
+
+  /* Maly mobil (do 480 px) - extremni narrowing */
+  @media (max-width: 480px) {
+    .app { padding: 10px 8px; }
+    header h1 { font-size: 19px; }
+    .kpis { grid-template-columns: 1fr; }
+    .kpi { padding: 12px 16px; }
+    .kpi .value { font-size: 22px; }
+    /* Step card actions - schovat slug a sc-code label, jen klik na kartu */
+    /* Tabs - smaller padding */
+    .tabs button { padding: 9px 12px; font-size: 12px; }
+    .tabs button span { display: none; }   /* skryt emoji prefixy? ne, nechat */
+    /* Manage clinics - schovat env sloupec taky */
+    .clin-table th:nth-child(4), .clin-table td:nth-child(4) { display: none; }
+    .filter-bar .f-group { flex: 1 1 100%; }
+    /* Pillule mensi */
+    .role-pill, .state-pill, .clinic-pill, .cat-pill { font-size: 10px; padding: 1px 6px; }
+  }
 </style>
 </head>
 <body>
