@@ -771,6 +771,14 @@ function loadDataSnapshot() {
   } catch (e) { return null; }
 }
 
+function safeRender(data) {
+  try { render(data); }
+  catch (e) {
+    console.error('render error:', e);
+    setBanner('error', 'Chyba vykreslení: ' + e.message + ' (viz console)');
+  }
+}
+
 async function loadData(refreshDone) {
   if (selectedSlugs.size === 0) {
     renderEmpty();
@@ -781,57 +789,54 @@ async function loadData(refreshDone) {
 
   setLoading(true);
   const slugs = [...selectedSlugs].join(',');
-  let renderedFromCache = false;
+  let renderedSomething = false;
 
-  // FAZE 1: ultra-rychly localStorage cache (instant) - pred jakymkoli volanim na server
-  const localSnap = loadDataSnapshot();
-  if (localSnap && localSnap.data) {
-    render(localSnap.data);
-    renderedFromCache = true;
-  }
-
-  // FAZE 2: serverova cache (pokud existuje a uzivatel nedal fresh) - rychle (~100ms)
-  // Server vrati `fromCache:true` pokud cache hit, jinak provede fresh fetch.
-  try {
-    if (!refreshDone) {
-      setBanner('loading', renderedFromCache ? 'Aktualizuji ze serverové cache…' : 'Načítám…');
+  // FAZE 1: server cache fetch (instantni pokud HIT, jinak fetch fresh ze servera)
+  if (!refreshDone) {
+    setBanner('loading', 'Načítám…');
+    try {
       const r1 = await fetch('/api/data?slugs=' + encodeURIComponent(slugs), { cache: 'no-store' });
       if (r1.ok) {
         const d1 = await r1.json();
         if (!d1.error) {
-          render(d1);
-          saveDataSnapshot(d1);
-          renderedFromCache = true;
+          safeRender(d1);
+          renderedSomething = true;
           if (d1.fromCache) {
             const ageMin = d1.cachedAt ? Math.round((Date.now() - new Date(d1.cachedAt).getTime()) / 60000) : 0;
-            setBanner('loading', `Zobrazena serverová cache (${ageMin} min stará) · stahuji čerstvá data…`);
+            // Pokud cache mladsi nez 2 min, neobtezuju s background refresh - server uz nedavno fetchnul
+            if (ageMin < 2) {
+              setBanner('', '');
+              setLoading(false);
+              return;
+            }
+            setBanner('loading', `Cache stará ${ageMin} min · stahuji čerstvá data na pozadí…`);
           } else {
-            // Server musel udelat fresh (cache miss) - mame uz fresh, hotovo
+            // Server udelal fresh fetch (cache MISS) - hotovo
             setBanner('', '');
             setLoading(false);
             return;
           }
         }
       }
-    }
-  } catch (e) { /* ignore - jdeme rovnou na fresh */ }
+    } catch (e) { console.warn('FAZE 1 selhala:', e.message); }
+  }
 
-  // FAZE 3: Vynuceny fresh fetch (server obejde svou cache, fetchne primo z Medevia)
+  // FAZE 2: Vynuceny fresh fetch
   try {
     const url = '/api/data?slugs=' + encodeURIComponent(slugs) + '&fresh=1' + (refreshDone ? '&refreshDone=1' : '');
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    render(data);
-    saveDataSnapshot(data);
+    safeRender(data);
+    renderedSomething = true;
     if (data.errors && data.errors.length) {
       setBanner('error', 'Chyby u: ' + data.errors.map(e=>`${e.label} (${e.error})`).join('; '));
     } else {
       setBanner('', '');
     }
   } catch (e) {
-    setBanner('error', 'Chyba aktualizace: ' + e.message + (renderedFromCache ? ' (zobrazena starší cache)' : ''));
+    setBanner('error', 'Chyba: ' + e.message + (renderedSomething ? ' (zobrazena cache)' : ''));
   } finally {
     setLoading(false);
   }
@@ -985,8 +990,11 @@ function render(payload) {
     });
   }
 
-  const openSorted = [...open].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-  document.getElementById('openCount').textContent = openSorted.length;
+  const openSortedFull = [...open].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const openSorted = openSortedFull.slice(0, 200);  // limit pro vykon, jinak DOM zamrzne
+  document.getElementById('openCount').textContent = openSortedFull.length > openSorted.length
+    ? `${openSorted.length} (z ${openSortedFull.length} celkem)`
+    : openSortedFull.length;
   const openBody = document.querySelector('#tableOpen tbody'); openBody.innerHTML = '';
   openSorted.forEach(r => {
     const isOverdue = r.dueDate && new Date(r.dueDate) < now;
