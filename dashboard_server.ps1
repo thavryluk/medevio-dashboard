@@ -43,6 +43,18 @@ if (-not $plansNeedSeed) {
     $existingPlans = (Get-Content $PlansFile -Raw -ErrorAction SilentlyContinue).Trim()
     if (-not $existingPlans -or $existingPlans -eq '[]') { $plansNeedSeed = $true }
 }
+# Migrace: zahod stare payload cache files (mely wrapper { payload:..., savedAt:... },
+# novy format ma vse na root urovni). Pri prvnim startu po deployi se to spravne pregeneruje.
+Get-ChildItem -Path $DataDir -Filter 'payload-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+        $head = (Get-Content $_.FullName -TotalCount 1 -ErrorAction SilentlyContinue)
+        if ($head -and $head -match '^\{\s*"payload"') {
+            Write-Host "MIGRACE: mazu legacy payload cache $($_.Name)"
+            Remove-Item $_.FullName -Force
+        }
+    } catch {}
+}
+
 if ($plansNeedSeed) {
     if ($env:PLANS_JSON_SEED_B64) {
         Write-Host "Seeduji $PlansFile z env PLANS_JSON_SEED_B64 (base64)"
