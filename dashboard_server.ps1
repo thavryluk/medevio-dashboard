@@ -90,37 +90,52 @@ function Invoke-Medevio([string]$Token, [string]$Env, [string]$Method, [string]$
 $script:DoneCache = @{}
 $script:DoneCacheTtlHours = 24
 
-# Cache celeho payloadu (vse klinik dohromady) - per kombinace slug. Slouzi pro
-# instantni "stale" odpoved pri otevreni dashboardu.
-$script:PayloadCache = @{}
+# Cache celeho payloadu - JEN soubor na disku (zadna in-memory duplikace).
+# Soubor obsahuje finalni JSON ktery jde rovnou jako response (stream-friendly,
+# konstantni pamet). Klient z 'cachedAt' v JSONu vypocita stari sam.
 
 function Get-PayloadCacheFile([string]$CacheKey) {
     $safe = $CacheKey -replace '[^a-zA-Z0-9-]', '_'
     if (-not $safe) { $safe = 'empty' }
     return Join-Path $DataDir "payload-$safe.json"
 }
+
 function Save-PayloadCache([string]$CacheKey, [object]$Payload) {
+    # Pridame metadata primo do payloadu - cache file je presne to co vrati endpoint.
+    $Payload | Add-Member -NotePropertyName 'fromCache' -NotePropertyValue $true                  -Force
+    $Payload | Add-Member -NotePropertyName 'cachedAt'  -NotePropertyValue (Get-Date).ToString('o') -Force
     $file = Get-PayloadCacheFile $CacheKey
-    $entry = [PSCustomObject]@{ payload = $Payload; savedAt = (Get-Date).ToString('o') }
-    $json = $entry | ConvertTo-Json -Depth 12 -Compress
     $tmp = "$file.tmp"
-    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding $false))
-    Move-Item -Force $tmp $file
-    $script:PayloadCache[$CacheKey] = [PSCustomObject]@{ payload = $Payload; savedAt = Get-Date }
-}
-function Load-PayloadCache([string]$CacheKey) {
-    if ($script:PayloadCache.ContainsKey($CacheKey)) { return $script:PayloadCache[$CacheKey] }
-    $file = Get-PayloadCacheFile $CacheKey
-    if (-not (Test-Path $file)) { return $null }
+    # Pouziti FileStream + StreamWriter aby ConvertTo-Json nemusel cely JSON drzet
+    $sw = New-Object System.IO.StreamWriter($tmp, $false, (New-Object System.Text.UTF8Encoding $false))
     try {
-        $raw = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json
-        $entry = [PSCustomObject]@{ payload = $raw.payload; savedAt = [datetime]::Parse($raw.savedAt) }
-        $script:PayloadCache[$CacheKey] = $entry
-        return $entry
-    } catch {
-        Write-Host "  WARN nelze nacist payload cache pro $CacheKey : $($_.Exception.Message)"
-        return $null
-    }
+        $sw.Write(($Payload | ConvertTo-Json -Depth 12 -Compress))
+    } finally { $sw.Close() }
+    Move-Item -Force $tmp $file
+    # Smazem fromCache/cachedAt at neumeknou v in-memory verzi pro ostatni callery
+    $Payload.PSObject.Properties.Remove('fromCache')
+    $Payload.PSObject.Properties.Remove('cachedAt')
+}
+
+function PayloadCacheExists([string]$CacheKey) {
+    return Test-Path (Get-PayloadCacheFile $CacheKey)
+}
+
+function Stream-PayloadCacheToResponse([string]$CacheKey, $Res) {
+    # Streamuje cache soubor primo do response - konstantni pamet, zadne parse.
+    $file = Get-PayloadCacheFile $CacheKey
+    $info = Get-Item $file
+    $Res.StatusCode = 200
+    $Res.ContentType = 'application/json; charset=utf-8'
+    $Res.Headers['Cache-Control'] = 'no-store'
+    $Res.ContentLength64 = $info.Length
+    $fs = [System.IO.File]::OpenRead($file)
+    try {
+        $buf = New-Object byte[] 65536
+        while (($read = $fs.Read($buf, 0, $buf.Length)) -gt 0) {
+            $Res.OutputStream.Write($buf, 0, $read)
+        }
+    } finally { $fs.Close() }
 }
 
 function Get-DoneCacheFile([object]$Clinic) {
@@ -1121,22 +1136,15 @@ try {
                 $fresh = $q.ContainsKey('fresh') -and ($q['fresh'] -eq '1' -or $q['fresh'] -eq 'true')
                 $cacheKey = ($slugs | Sort-Object) -join ','
 
-                $cached = if (-not $fresh) { Load-PayloadCache $cacheKey } else { $null }
-                if ($cached) {
-                    $ageMin = [int]((Get-Date) - $cached.savedAt).TotalMinutes
-                    $cached.payload | Add-Member -NotePropertyName 'fromCache'   -NotePropertyValue $true   -Force
-                    $cached.payload | Add-Member -NotePropertyName 'cachedAt'    -NotePropertyValue $cached.savedAt.ToString('o') -Force
-                    $cached.payload | Add-Member -NotePropertyName 'cacheAgeMin' -NotePropertyValue $ageMin -Force
-                    Write-Host "  payload cache HIT [$cacheKey] (stari $ageMin min)"
-                    Send-Json $res $cached.payload
+                if ((-not $fresh) -and (PayloadCacheExists $cacheKey)) {
+                    Write-Host "  payload cache HIT [$cacheKey] - stream"
+                    Stream-PayloadCacheToResponse $cacheKey $res
                 } else {
                     if (-not $fresh) { Write-Host "  payload cache MISS [$cacheKey] - fetchuju fresh" }
                     $payload = Build-Payload $slugs $refreshDone
-                    $payload | Add-Member -NotePropertyName 'fromCache'   -NotePropertyValue $false                  -Force
-                    $payload | Add-Member -NotePropertyName 'cachedAt'    -NotePropertyValue (Get-Date).ToString('o') -Force
-                    $payload | Add-Member -NotePropertyName 'cacheAgeMin' -NotePropertyValue 0                        -Force
                     try { Save-PayloadCache $cacheKey $payload } catch { Write-Host "  WARN payload save: $($_.Exception.Message)" }
-                    Send-Json $res $payload
+                    # Stream z disku (uz tam je novy file s metadata)
+                    Stream-PayloadCacheToResponse $cacheKey $res
                 }
             }
             else {

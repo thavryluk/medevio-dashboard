@@ -803,7 +803,7 @@ async function loadData(refreshDone) {
           saveDataSnapshot(d1);
           renderedFromCache = true;
           if (d1.fromCache) {
-            const ageMin = d1.cacheAgeMin || 0;
+            const ageMin = d1.cachedAt ? Math.round((Date.now() - new Date(d1.cachedAt).getTime()) / 60000) : 0;
             setBanner('loading', `Zobrazena serverová cache (${ageMin} min stará) · stahuji čerstvá data…`);
           } else {
             // Server musel udelat fresh (cache miss) - mame uz fresh, hotovo
