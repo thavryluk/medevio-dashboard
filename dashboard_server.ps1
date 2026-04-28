@@ -689,10 +689,11 @@ function Try-CreateRequest([object]$Clinic, [string]$PatientId, [string]$EcrfId,
         } catch {
             $msg = $_.Exception.Message
             $is500 = ($msg -match '\(500\)|Vnit.{1,3}n.{1,3} chyba|Internal Server')
+            $is403 = ($msg -match '\(403\)|Forbidden|Zakazano')
             $is404 = ($msg -match '\(404\)|Nenalezeno|Not Found|UserECRF not found')
             $is400 = ($msg -match '\(400\)|Bad Request|VALIDATION')
             if ($is500 -and $attempt -lt 3) { Start-Sleep -Milliseconds 600; continue }
-            return @{ ok = $false; err = $msg; transient = $is500; clientRefuse = ($is404 -or $is400) }
+            return @{ ok = $false; err = $msg; transient = $is500; clientRefuse = ($is404 -or $is400); permissionDenied = $is403 }
         }
     }
     return @{ ok = $false; err = 'Vycerpan retry'; transient = $true }
@@ -710,14 +711,26 @@ function Create-PlanInMedevio([object]$Plan, [object]$Clinic, [object]$Template)
         if ($candidates.Count -eq 0) { $errors += "Krok $($step.code): zadny ECRF v klinice"; continue }
 
         $dueIso = (CalcDueDate $surgery $step.offsetDays)
-        $usedSid = $null; $newId = $null; $allErrs = @()
+        $usedSid = $null; $newId = $null; $allErrs = @(); $abortPlan = $false
 
         foreach ($c in $candidates) {
             $r = Try-CreateRequest $Clinic $Plan.patientId $c.id $step.userNote $dueIso $isFirst
             if ($r.ok) { $newId = $r.id; $usedSid = $c.sid; break }
             $allErrs += "$($c.sid): $($r.err)"
+            if ($r.permissionDenied) {
+                # 403 znamena ze token nema opravneni v teto klinice. Nema smysl zkouset
+                # dalsi ECRF kandidaty ani dalsi kroky - aborte cely plan.
+                Write-Host "  PERMISSION DENIED v klinike $($Clinic.slug) - aborte plan"
+                $abortPlan = $true
+                break
+            }
             # Mezi pokusy s ruznymi ECRF chvilku pockame, at neflood-ujeme API
             Start-Sleep -Milliseconds 200
+        }
+
+        if ($abortPlan) {
+            $errors += "PLAN ABORTOVAN: token nema opravneni vytvaret pozadavky v klinice '$($Clinic.label)' (HTTP 403). Kontaktujte podpora@medevio.cz pro pristupova prava."
+            break
         }
 
         if ($newId) {
