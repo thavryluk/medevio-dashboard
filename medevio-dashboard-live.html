@@ -666,16 +666,46 @@ document.addEventListener('click', e => {
   if (c && !c.contains(e.target)) document.getElementById('msPanel').classList.remove('open');
 });
 
+function dataCacheKey() { return 'medevio:lastData:' + [...selectedSlugs].sort().join(','); }
+
+function saveDataSnapshot(data) {
+  try {
+    const payload = { savedAt: new Date().toISOString(), data };
+    localStorage.setItem(dataCacheKey(), JSON.stringify(payload));
+  } catch (e) {
+    // Tichoucky fail (kvota localStorage prekrocena u velkych klinik)
+    console.warn('localStorage save selhal:', e.message);
+  }
+}
+
+function loadDataSnapshot() {
+  try {
+    const raw = localStorage.getItem(dataCacheKey());
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
 async function loadData(refreshDone) {
-  setLoading(true);
   if (selectedSlugs.size === 0) {
     renderEmpty();
     setLoading(false);
     setBanner('', '');
     return;
   }
-  const refreshSuffix = refreshDone ? ' (včetně hotových — pomalé)' : '';
-  setBanner('loading', `Načítám data pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}${refreshSuffix}…`);
+
+  // 1) Okamzite vykresli ze snapshotu (pokud existuje) - smooth UX
+  const snap = loadDataSnapshot();
+  if (snap && snap.data) {
+    render(snap.data);
+    const ageMin = Math.round((Date.now() - new Date(snap.savedAt).getTime()) / 60000);
+    setBanner('loading', `Zobrazena cache (před ${ageMin} min) · obnovuji ze serveru…`);
+  } else {
+    setBanner('loading', `Načítám data poprvé pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}…`);
+  }
+  setLoading(true);
+
+  // 2) Na pozadi (vlastne ne, ale UI uz neco ukazuje) stahni fresh
   try {
     const slugs = [...selectedSlugs].join(',');
     const url = '/api/data?slugs=' + encodeURIComponent(slugs) + (refreshDone ? '&refreshDone=1' : '');
@@ -684,13 +714,14 @@ async function loadData(refreshDone) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     render(data);
+    saveDataSnapshot(data);
     if (data.errors && data.errors.length) {
       setBanner('error', 'Chyby u: ' + data.errors.map(e=>`${e.label} (${e.error})`).join('; '));
     } else {
       setBanner('', '');
     }
   } catch (e) {
-    setBanner('error', 'Chyba: ' + e.message);
+    setBanner('error', 'Chyba aktualizace: ' + e.message + (snap ? ' (zobrazena starší cache)' : ''));
   } finally {
     setLoading(false);
   }
