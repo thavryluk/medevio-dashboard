@@ -90,6 +90,39 @@ function Invoke-Medevio([string]$Token, [string]$Env, [string]$Method, [string]$
 $script:DoneCache = @{}
 $script:DoneCacheTtlHours = 24
 
+# Cache celeho payloadu (vse klinik dohromady) - per kombinace slug. Slouzi pro
+# instantni "stale" odpoved pri otevreni dashboardu.
+$script:PayloadCache = @{}
+
+function Get-PayloadCacheFile([string]$CacheKey) {
+    $safe = $CacheKey -replace '[^a-zA-Z0-9-]', '_'
+    if (-not $safe) { $safe = 'empty' }
+    return Join-Path $DataDir "payload-$safe.json"
+}
+function Save-PayloadCache([string]$CacheKey, [object]$Payload) {
+    $file = Get-PayloadCacheFile $CacheKey
+    $entry = [PSCustomObject]@{ payload = $Payload; savedAt = (Get-Date).ToString('o') }
+    $json = $entry | ConvertTo-Json -Depth 12 -Compress
+    $tmp = "$file.tmp"
+    [System.IO.File]::WriteAllText($tmp, $json, (New-Object System.Text.UTF8Encoding $false))
+    Move-Item -Force $tmp $file
+    $script:PayloadCache[$CacheKey] = [PSCustomObject]@{ payload = $Payload; savedAt = Get-Date }
+}
+function Load-PayloadCache([string]$CacheKey) {
+    if ($script:PayloadCache.ContainsKey($CacheKey)) { return $script:PayloadCache[$CacheKey] }
+    $file = Get-PayloadCacheFile $CacheKey
+    if (-not (Test-Path $file)) { return $null }
+    try {
+        $raw = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json
+        $entry = [PSCustomObject]@{ payload = $raw.payload; savedAt = [datetime]::Parse($raw.savedAt) }
+        $script:PayloadCache[$CacheKey] = $entry
+        return $entry
+    } catch {
+        Write-Host "  WARN nelze nacist payload cache pro $CacheKey : $($_.Exception.Message)"
+        return $null
+    }
+}
+
 function Get-DoneCacheFile([object]$Clinic) {
     $safeName = "$($Clinic.slug)-$($Clinic.env)" -replace '[^a-zA-Z0-9-]', '_'
     return Join-Path $DataDir "cache-done-$safeName.json"
@@ -1085,7 +1118,26 @@ try {
                 $slugs = @()
                 if ($q.ContainsKey('slugs') -and $q['slugs']) { $slugs = $q['slugs'].Split(',') | Where-Object { $_ } }
                 $refreshDone = $q.ContainsKey('refreshDone') -and ($q['refreshDone'] -eq '1' -or $q['refreshDone'] -eq 'true')
-                Send-Json $res (Build-Payload $slugs $refreshDone)
+                $fresh = $q.ContainsKey('fresh') -and ($q['fresh'] -eq '1' -or $q['fresh'] -eq 'true')
+                $cacheKey = ($slugs | Sort-Object) -join ','
+
+                $cached = if (-not $fresh) { Load-PayloadCache $cacheKey } else { $null }
+                if ($cached) {
+                    $ageMin = [int]((Get-Date) - $cached.savedAt).TotalMinutes
+                    $cached.payload | Add-Member -NotePropertyName 'fromCache'   -NotePropertyValue $true   -Force
+                    $cached.payload | Add-Member -NotePropertyName 'cachedAt'    -NotePropertyValue $cached.savedAt.ToString('o') -Force
+                    $cached.payload | Add-Member -NotePropertyName 'cacheAgeMin' -NotePropertyValue $ageMin -Force
+                    Write-Host "  payload cache HIT [$cacheKey] (stari $ageMin min)"
+                    Send-Json $res $cached.payload
+                } else {
+                    if (-not $fresh) { Write-Host "  payload cache MISS [$cacheKey] - fetchuju fresh" }
+                    $payload = Build-Payload $slugs $refreshDone
+                    $payload | Add-Member -NotePropertyName 'fromCache'   -NotePropertyValue $false                  -Force
+                    $payload | Add-Member -NotePropertyName 'cachedAt'    -NotePropertyValue (Get-Date).ToString('o') -Force
+                    $payload | Add-Member -NotePropertyName 'cacheAgeMin' -NotePropertyValue 0                        -Force
+                    try { Save-PayloadCache $cacheKey $payload } catch { Write-Host "  WARN payload save: $($_.Exception.Message)" }
+                    Send-Json $res $payload
+                }
             }
             else {
                 $res.StatusCode = 404

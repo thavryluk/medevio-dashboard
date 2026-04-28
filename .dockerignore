@@ -9,6 +9,8 @@
 # Sensitivni soubory - nikdy do image
 clinics.json
 plans.json
+cache-*.json
+payload-*.json
 
 # Lokalni / debug artefakty
 test-step.pdf

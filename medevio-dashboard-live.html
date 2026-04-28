@@ -694,21 +694,46 @@ async function loadData(refreshDone) {
     return;
   }
 
-  // 1) Okamzite vykresli ze snapshotu (pokud existuje) - smooth UX
-  const snap = loadDataSnapshot();
-  if (snap && snap.data) {
-    render(snap.data);
-    const ageMin = Math.round((Date.now() - new Date(snap.savedAt).getTime()) / 60000);
-    setBanner('loading', `Zobrazena cache (před ${ageMin} min) · obnovuji ze serveru…`);
-  } else {
-    setBanner('loading', `Načítám data poprvé pro ${selectedSlugs.size} klinik${selectedSlugs.size>=5?'':selectedSlugs.size>=2?'y':'u'}…`);
-  }
   setLoading(true);
+  const slugs = [...selectedSlugs].join(',');
+  let renderedFromCache = false;
 
-  // 2) Na pozadi (vlastne ne, ale UI uz neco ukazuje) stahni fresh
+  // FAZE 1: ultra-rychly localStorage cache (instant) - pred jakymkoli volanim na server
+  const localSnap = loadDataSnapshot();
+  if (localSnap && localSnap.data) {
+    render(localSnap.data);
+    renderedFromCache = true;
+  }
+
+  // FAZE 2: serverova cache (pokud existuje a uzivatel nedal fresh) - rychle (~100ms)
+  // Server vrati `fromCache:true` pokud cache hit, jinak provede fresh fetch.
   try {
-    const slugs = [...selectedSlugs].join(',');
-    const url = '/api/data?slugs=' + encodeURIComponent(slugs) + (refreshDone ? '&refreshDone=1' : '');
+    if (!refreshDone) {
+      setBanner('loading', renderedFromCache ? 'Aktualizuji ze serverové cache…' : 'Načítám…');
+      const r1 = await fetch('/api/data?slugs=' + encodeURIComponent(slugs), { cache: 'no-store' });
+      if (r1.ok) {
+        const d1 = await r1.json();
+        if (!d1.error) {
+          render(d1);
+          saveDataSnapshot(d1);
+          renderedFromCache = true;
+          if (d1.fromCache) {
+            const ageMin = d1.cacheAgeMin || 0;
+            setBanner('loading', `Zobrazena serverová cache (${ageMin} min stará) · stahuji čerstvá data…`);
+          } else {
+            // Server musel udelat fresh (cache miss) - mame uz fresh, hotovo
+            setBanner('', '');
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    }
+  } catch (e) { /* ignore - jdeme rovnou na fresh */ }
+
+  // FAZE 3: Vynuceny fresh fetch (server obejde svou cache, fetchne primo z Medevia)
+  try {
+    const url = '/api/data?slugs=' + encodeURIComponent(slugs) + '&fresh=1' + (refreshDone ? '&refreshDone=1' : '');
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
@@ -721,7 +746,7 @@ async function loadData(refreshDone) {
       setBanner('', '');
     }
   } catch (e) {
-    setBanner('error', 'Chyba aktualizace: ' + e.message + (snap ? ' (zobrazena starší cache)' : ''));
+    setBanner('error', 'Chyba aktualizace: ' + e.message + (renderedFromCache ? ' (zobrazena starší cache)' : ''));
   } finally {
     setLoading(false);
   }

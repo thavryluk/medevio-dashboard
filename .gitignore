@@ -7,6 +7,7 @@ plans.json
 # Cache souborů obsahuje pacientská data - NIKDY do gitu
 cache-done-*.json
 cache-*.json
+payload-*.json
 
 # Generované / dočasné soubory
 *.tmp
