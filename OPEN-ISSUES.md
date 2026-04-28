@@ -2,6 +2,10 @@
 
 Co jsme záměrně odložili nebo zatím neimplementovali.
 
+## UI drobnosti
+
+- **Oddělovač tisíců** — všechna čísla v UI (KPI karty, počty požadavků, cache info, tabulky) zobrazovat s mezerou jako oddělovačem tisíců (česká konvence: `1 234 567` místo `1234567`). JS helper: `n.toLocaleString('cs-CZ')`. Aplikovat v `escHtml`/`fmtNum` helperu napříč.
+
 ## Veřejný deploy
 
 Aktuálně jen lokálně (`localhost:8766`). Diskutovány varianty:
